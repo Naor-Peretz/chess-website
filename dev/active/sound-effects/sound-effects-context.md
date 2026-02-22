@@ -35,7 +35,7 @@
 11. **`onDrop` return flow**: Returns `boolean` (react-chessboard contract). `playRef.current()` is fire-and-forget, cannot interfere
 12. **Normalization**: Peak normalize -1dB + manual QA listening test (not LUFS — trade-off documented)
 13. **Error boundary isolation**: Audio errors must NOT trigger `game/[id]/error.tsx` — all `.play()` uses `.catch(() => {})`
-14. **Stale response guard**: Verify `gameId` unchanged before playing engine sound in `.then()` handler
+14. **Stale response guard**: NOT needed — `gameId` is from `params.id` (route param), different `[id]` routes cause full remount, so `.then()` handler is a no-op on unmounted component
 15. **Low-time threshold rationale**: 30s visual (awareness) → 10s audio (urgency) — progressive ramp
 
 ## Sound Type Detection

@@ -1,6 +1,6 @@
 # Sound Effects - Implementation Plan
 
-**Last Updated:** 2026-02-22 (v18 - fix lastWarningTime initialization in page-load guard)
+**Last Updated:** 2026-02-22 (v19 - address Opus review 1+2 MEDIUM+ items)
 
 ## Executive Summary
 
@@ -141,7 +141,14 @@ Add chess sound effects for moves, captures, check, castling, promotion, and gam
      - `onSquareClick` delegates to `onDrop`, so `onDrop` covers drag-and-drop AND click-to-move. **Pre-Phase 2 verification required:** At the start of Phase 2, confirm in react-chessboard v5 source/docs that `onSquareClick` still delegates to `onDrop`. If it does NOT, add sound integration to `onSquareClick` as a third path (same pattern as `onKeyboardMove`)
      - **`onKeyboardMove` is a separate, independent code path** with its own `testChess.move()`, optimistic update, and `gameApi.makeMove()` call. It does NOT delegate to `onDrop`. Both paths must have sound integration
      - Do NOT add sound in `onSquareClick` (would cause duplicate sounds with `onDrop`)
-   - **User move sound (both paths):** Play at the optimistic update point (before API call), using the `testChess.move()` result which has flags. Use `testChess.inCheck()` (not main `chess`) for check detection since `testChess` reflects the post-move state. **Variable scoping note:** `testChess` and `moveResult` are declared inside a `try` block — sound code MUST be placed inside that same `try` block (after the `if (!moveResult) return false` guard, before the API call). `onDrop` returns `boolean` (react-chessboard contract): `false` for invalid moves, `true` at the end. Sound code must not interfere with this return flow — since `playRef.current()` is fire-and-forget (`.catch(() => {})` internally), it cannot throw or prevent `return true`. All sound-related code uses only locally-scoped variables within the handler — no new state or context dependencies are introduced
+   - **User move sound (both paths):** Play at the optimistic update point (before API call), using the `testChess.move()` result which has flags. Use `testChess.inCheck()` (not main `chess`) for check detection since `testChess` reflects the post-move state. **Variable scoping note:** `testChess` and `moveResult` are declared inside a `try` block — sound code MUST be placed inside that same `try` block (after the `if (!moveResult) return false` guard, before the API call). `onDrop` returns `boolean` (react-chessboard contract): `false` for invalid moves, `true` at the end. Sound code must not interfere with this return flow. **Wrap sound call in its own try-catch** to prevent `determineSoundType()` from ever interfering with the return flow — if `moveResult.flags` is unexpectedly `undefined`, an uncaught exception would skip `return true` and fall through to implicit `return false`, causing the board to reject a visually valid move:
+     ```typescript
+     // In onDrop (after moveResult validation, before API call):
+     try { playRef.current(determineSoundType(moveResult, testChess.inCheck())); } catch {}
+     // Same pattern in onKeyboardMove for consistency (even though it returns void)
+     ```
+     All sound-related code uses only locally-scoped variables within the handler — no new state or context dependencies are introduced
+   - **Sound detection source:** Sound type is determined from the `testChess.move()` result (chess.js `Move` type with `.flags`, `.captured`), NOT from react-chessboard callback args (`{ piece, sourceSquare, targetSquare }`). This means react-chessboard callback shape changes won't affect sound detection
    - **Promotion sound timing:** Currently auto-queens (no promotion picker yet) — play promotion sound immediately at the optimistic update point. When the promotion picker UI is added (PR #150), sound must move to fire **after** piece selection completes (not on pawn drop to last rank). The `determineSoundType()` call stays the same; only the trigger timing changes
    - **Game-over sound — 3 trigger paths:**
      1. **Checkmate/stalemate via makeMove:** In `.then()` handler, check `result.game.isGameOver && !previousGame.isGameOver`
@@ -158,6 +165,7 @@ Add chess sound effects for moves, captures, check, castling, promotion, and gam
    - **No sound on failed optimistic update** - if API call fails and move reverts, sound already played is acceptable (too fast to matter)
    - **`playRef` pattern:** `useSound` exposes `playRef` (a stable ref) directly. Use `playRef.current(soundType)` inside `onDrop`/`onKeyboardMove` — no dependency array changes needed. This keeps the existing dependency arrays unchanged
    - **Page complexity management:** Extract a `useGameSounds(game, displayTimeUser, playRef)` custom hook in `apps/frontend/src/hooks/useGameSounds.ts` that encapsulates: the game-over useEffect (with `wasGameOverOnLoad` + `hasSetInitialGameOver` refs), the low-time warning useEffect (with `hasPlayedWarning` + `lastWarningTime` + `hasReceivedInitialTime` refs), and the `wasGameOverOnLoad` initialization logic. **`game` is passed as a single parameter** (not destructured into `timeControlType` etc.) — the hook derives `game?.timeControlType` internally, centralizing null guards. When `game` is `null` (initial load), both useEffects return early. This avoids the caller needing defensive `game?.timeControlType ?? 'none'`. Page.tsx changes: one hook call + `playRef.current()` calls in `onDrop`/`onKeyboardMove`. **Decision made:** Extract, don't inline. 5 refs + 2 useEffects added to an already-complex page.tsx warrants extraction
+   - **`displayTimeUser` tick frequency note:** The low-time warning useEffect depends on `displayTimeUser` which changes every tick (~100ms). This is by design — the early-return guards (game-over, untimed, uninitialized, above threshold) make most invocations a no-op. Do NOT debounce or throttle this — the useEffect body is cheap and must react promptly when the threshold is crossed. **Render cycle note:** Custom hooks share the calling component's render cycle — `displayTimeUser` does not cause additional renders beyond what already occurs from the clock tick interval in page.tsx
    - **Acceptance:** Correct sound plays for each event type via both input methods, no sound on page load or when viewing finished games
 
 8. **Engine move sound detection**
@@ -198,7 +206,7 @@ Add chess sound effects for moves, captures, check, castling, promotion, and gam
    - Play once per threshold crossing (use `hasPlayedWarning` ref). **Guard order in useEffect (top to bottom):**
      1. `if (!game || game.isGameOver) return;` — no warnings when game not loaded or finished
      2. `if (game.timeControlType === 'none') return;` — no warnings for untimed games (where `displayTimeUser` legitimately stays `0`)
-     3. `if (displayTimeUser === 0) return;` — skip uninitialized state (page.tsx line 47 initializes to `0` before `fetchGame()` populates real value)
+     3. `if (displayTimeUser === 0) return;` — skip uninitialized state (page.tsx line 47 initializes to `0` before `fetchGame()` populates real value). **Dual meaning:** `displayTimeUser === 0` means BOTH "not yet initialized" AND "time expired." This guard is safe because: (a) when uninitialized, guard #1 (`game` is null) or this guard catches it; (b) when time expires, there is a brief fetch round-trip window where `displayTimeUser === 0` but `game.isGameOver` is still `false` (server hasn't confirmed yet) — this guard catches the zero value directly, and by this point `hasPlayedWarning` is already `true` from the 10s threshold crossing, so no incorrect sound plays. **React 19 batching assumption:** `displayTimeUser` transitions from `0` → real value in a single React 19 commit (state updates from `fetchGame` are batched), so this guard never sees an intermediate state where `displayTimeUser` is 0 but `game` is loaded with a real time value
      4. **First-render detection:** Use `hasReceivedInitialTime` ref (starts `false`). When this guard runs with `displayTimeUser > 0` for the first time, set `hasReceivedInitialTime.current = true`. If `displayTimeUser < 10_000` on this first real render, set `hasPlayedWarning.current = true` AND `lastWarningTime.current = Date.now()` silently (page-load guard — prevents warning on resume of a low-time game, and arms the cooldown so that if increment later pushes above threshold and resets `hasPlayedWarning`, the cooldown still prevents an immediate re-trigger)
      5. `if (displayTimeUser >= 10_000) { /* reset hasPlayedWarning if increment pushed above threshold */ return; }`
      6. Threshold crossed — play warning if `!hasPlayedWarning.current` and cooldown elapsed
@@ -228,7 +236,7 @@ Add chess sound effects for moves, captures, check, castling, promotion, and gam
 
 12. **Set up frontend unit test infrastructure (prerequisite)**
     - The frontend currently has **zero unit test infrastructure** — only Playwright E2E tests exist
-    - Install: `vitest`, `@testing-library/react`, `@testing-library/jest-dom`, `jsdom` as devDependencies
+    - Install: `vitest`, `@testing-library/react@^16.0.0` (v16+ required for React 19 compatibility), `@testing-library/jest-dom`, `jsdom` as devDependencies
     - Create `apps/frontend/vitest.config.ts` with jsdom environment and `@` path alias matching `tsconfig.json`
     - Add `"test": "vitest run"` script to `apps/frontend/package.json`
     - **Scope:** Keep minimal — only configure enough to test pure functions (`determineSoundType`) and the `useSound` hook with mocked `HTMLAudioElement`. Do NOT attempt to test full page components (App Router `'use client'` directives, React Server Components) — leave that to Playwright
@@ -238,7 +246,7 @@ Add chess sound effects for moves, captures, check, castling, promotion, and gam
 13. **Unit tests**
     - `determineSoundType()` pure function tests (all flag combinations, priority order including promotion+capture)
     - `determineGameOverSoundType()` tests (all GameResult variants)
-    - `useSound` hook tests: mock `HTMLAudioElement` in `vitest.setup.ts` — jsdom's `play()` returns `undefined` not a Promise, so mock must return `Promise.resolve()`
+    - `useSound` hook tests: mock `HTMLAudioElement` in `vitest.setup.ts` — jsdom doesn't implement the `Audio` constructor at all (returns `HTMLUnknownElement`), so mock the entire constructor (not just `play()`). Mock must provide: `play()` returning `Promise.resolve()`, `pause()`, `currentTime`, `volume`, `muted`, `preload`, `src`, `addEventListener`/`removeEventListener`, and `onerror` handler support
     - Test play(), setVolume(), toggleMute()
     - Test volume/mute persistence in localStorage
     - Test SSR guard (no errors when window undefined)
@@ -314,6 +322,7 @@ Add chess sound effects for moves, captures, check, castling, promotion, and gam
 - Volume slider touch target inconsistency on mobile (Sonnet v10 - native `<input type="range">` is acceptable; test on mobile during Playwright phase)
 - Extract shared `executeMove()` helper from onDrop/onKeyboardMove (Opus v10 - out of scope for sound PR, would be a refactor; noted as optional future improvement)
 - `onDrop` dependency array explicitly unchanged — `[game, chess, gameId, isMoving]` (Opus LOW v11 - confirmed zero new deps; sound code uses only local variables + playRef)
+- `onDrop` signature note — PROMOTED to step 7 in v19 (Opus Review 1 H1 - sound detection uses `testChess.move()` result, not react-chessboard callback args)
 - Resign sound type correctness — `user_resigned` maps to `gameOverLoss` in exhaustive Record (Opus LOW v11 - confirmed correct)
 - Game page missing from axe-core spec (Sonnet v11 - out of scope for sound PR; tracked separately)
 - React 19 batching assumption for `wasGameOverOnLoad` (Sonnet v11 - valid in React 19; documented as assumption)
