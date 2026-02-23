@@ -1,0 +1,23 @@
+# Sound Effects License
+
+All sound files in this directory are licensed under CC0 (Creative Commons Zero).
+No attribution is required, but credit is appreciated.
+
+## Source: Kenney (kenney.nl)
+
+All sounds sourced from Kenney's free game asset packs, released under CC0 1.0 Universal.
+https://kenney.nl - https://creativecommons.org/publicdomain/zero/1.0/
+
+## Files
+
+| File                  | Description              | License | Source Pack             |
+|-----------------------|--------------------------|---------|------------------------|
+| move.mp3              | Piece placed on square   | CC0     | Kenney Impact Sounds   |
+| capture.mp3           | Piece captured           | CC0     | Kenney Impact Sounds   |
+| check.mp3             | Check alert tone         | CC0     | Kenney Interface Sounds|
+| castling.mp3          | Two-piece castle move    | CC0     | Kenney Impact Sounds   |
+| promotion.mp3         | Pawn promotion           | CC0     | Kenney Interface Sounds|
+| game-over-win.mp3     | Win sound (positive)     | CC0     | Kenney Music Jingles   |
+| game-over-loss.mp3    | Loss sound (negative)    | CC0     | Kenney Music Jingles   |
+| game-over-draw.mp3    | Draw sound (neutral)     | CC0     | Kenney Interface Sounds|
+| low-time-warning.mp3  | Low time warning (10s)   | CC0     | Kenney Interface Sounds|

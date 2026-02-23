@@ -7,8 +7,11 @@ import { Chessboard } from 'react-chessboard';
 import { Chess, Square } from 'chess.js';
 import { useAuth } from '@/contexts/AuthContext';
 import { gameApi } from '@/lib/gameApi';
+import { determineSoundType } from '@/lib/soundUtils';
 import { useBoardSize } from '@/hooks/useBoardSize';
 import { useMoveReplay } from '@/hooks/useMoveReplay';
+import { useSound } from '@/hooks/useSound';
+import { useGameSounds } from '@/hooks/useGameSounds';
 import { useAriaLiveAnnouncer, sanitizeMoveNotation } from '@/hooks/useAriaLiveAnnouncer';
 import { MoveReplayControls } from '@/components/MoveReplayControls';
 import type { GameResponse, MakeMoveRequest } from '@chess-website/shared';
@@ -20,6 +23,7 @@ import {
   GameInfo,
   GameOverModal,
   KeyboardMoveInput,
+  SoundControl,
 } from './components';
 
 export default function GamePage() {
@@ -29,6 +33,7 @@ export default function GamePage() {
   const gameId = params.id as string;
   const { boardSize } = useBoardSize();
   const { announce } = useAriaLiveAnnouncer();
+  const { playRef, setVolume, toggleMute, volume, isMuted } = useSound();
 
   const [game, setGame] = useState<GameResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -71,6 +76,9 @@ export default function GamePage() {
 
   // Use replay FEN when in replay mode, otherwise use current game FEN
   const displayFen = isReplayMode ? replayFen : (game?.currentFen ?? '');
+
+  // Sound effects for game-over and low-time warning
+  useGameSounds(game, displayTimeUser, playRef);
 
   // Custom square styles for highlighting selected piece and possible moves
   const customSquareStyles = useMemo(() => {
@@ -344,10 +352,20 @@ export default function GamePage() {
           return false; // Invalid move
         }
         newFen = testChess.fen();
+
+        // Play user move sound at optimistic update point
+        try {
+          playRef.current(determineSoundType(moveResult, testChess.inCheck()));
+        } catch {
+          /* sound detection must never interfere with move flow */
+        }
       } catch {
         triggerInvalidMove();
         return false; // Invalid move
       }
+
+      // Capture FEN before engine move for engine sound detection
+      const userMoveFen = newFen;
 
       // Optimistic update - show the move immediately
       const previousGame = game;
@@ -366,6 +384,19 @@ export default function GamePage() {
         .makeMove(gameId, move)
         .then((result) => {
           setGame(result.game);
+
+          // Play engine move sound by replaying SAN on client-side chess instance
+          if (result.engineMove?.san) {
+            try {
+              const tempChess = new Chess(userMoveFen);
+              const engineResult = tempChess.move(result.engineMove.san);
+              if (engineResult) {
+                playRef.current(determineSoundType(engineResult, tempChess.inCheck()));
+              }
+            } catch {
+              /* malformed SAN — skip engine sound silently */
+            }
+          }
         })
         .catch((err) => {
           console.error('Failed to make move:', err);
@@ -379,7 +410,7 @@ export default function GamePage() {
 
       return true; // Return true immediately for optimistic update
     },
-    [game, chess, gameId, isMoving]
+    [game, chess, gameId, isMoving, playRef]
   );
 
   // Handle keyboard move input (algebraic notation)
@@ -394,9 +425,19 @@ export default function GamePage() {
         const moveResult = testChess.move({ from, to, promotion });
         if (!moveResult) return;
         newFen = testChess.fen();
+
+        // Play user move sound at optimistic update point
+        try {
+          playRef.current(determineSoundType(moveResult, testChess.inCheck()));
+        } catch {
+          /* sound detection must never interfere with move flow */
+        }
       } catch {
         return;
       }
+
+      // Capture FEN before engine move for engine sound detection
+      const userMoveFen = newFen;
 
       // Optimistic update
       const previousGame = game;
@@ -414,6 +455,19 @@ export default function GamePage() {
         .makeMove(gameId, move)
         .then((result) => {
           setGame(result.game);
+
+          // Play engine move sound by replaying SAN on client-side chess instance
+          if (result.engineMove?.san) {
+            try {
+              const tempChess = new Chess(userMoveFen);
+              const engineResult = tempChess.move(result.engineMove.san);
+              if (engineResult) {
+                playRef.current(determineSoundType(engineResult, tempChess.inCheck()));
+              }
+            } catch {
+              /* malformed SAN — skip engine sound silently */
+            }
+          }
         })
         .catch((err) => {
           console.error('Failed to make move:', err);
@@ -424,7 +478,7 @@ export default function GamePage() {
           setIsMoving(false);
         });
     },
-    [game, chess, gameId, isMoving]
+    [game, chess, gameId, isMoving, playRef]
   );
 
   // Handle square click to show possible moves
@@ -761,6 +815,14 @@ export default function GamePage() {
 
           {/* Game Info / Status Message */}
           <GameInfo game={game} />
+
+          {/* Sound Controls */}
+          <SoundControl
+            volume={volume}
+            isMuted={isMuted}
+            onVolumeChange={setVolume}
+            onToggleMute={toggleMute}
+          />
 
           {/* Replay Controls (for finished games) */}
           {isReplayMode && totalMoves > 0 && (

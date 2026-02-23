@@ -5,3 +5,4 @@ export { EngineThinkingOverlay } from './EngineThinkingOverlay';
 export { GameInfo } from './GameInfo';
 export { GameOverModal } from './GameOverModal';
 export { KeyboardMoveInput } from './KeyboardMoveInput';
+export { SoundControl } from './SoundControl';
