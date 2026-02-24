@@ -1,8 +1,16 @@
 # Pawn Promotion UI - Implementation Plan
 
-**Last Updated:** 2026-02-23 (v7.3 - incorporate sound effects system from feature/sound-effects-impl)
+**Last Updated:** 2026-02-24 (v7.4 - fix 4 MEDIUMs from Opus+Sonnet V7.3 CI review)
 
-## Review Feedback Incorporated (v7.3)
+## Review Feedback Incorporated (v7.4)
+
+**From Opus V7.3 CI review (Feb 24) — APPROVE:**
+1. MEDIUM: Remove `chess` from `handlePromotionSelect` deps (creates own testChess) ✅
+
+**From Sonnet V7.3 CI review (Feb 24) — APPROVE with 3 medium fixes:**
+1. MEDIUM: Add `.catch` rollback + `.finally(() => setIsMoving(false))` to `handlePromotionSelect` ✅
+2. MEDIUM: Add `pendingPromotion` to `onKeyboardMove` dep array ✅
+3. MEDIUM: Add `pendingPromotion` to visibility change handler dep array ✅
 
 **v7.3 changes — Sound effects integration:**
 1. Sound system exists on `feature/sound-effects-impl` (will rebase before implementation) ✅
@@ -200,25 +208,27 @@ When user selects a piece from the dialog:
    } catch { /* sound must never interfere with move flow */ }
    ```
 7. Capture `userMoveFen = testChess.fen()` (needed for engine sound detection)
-8. Optimistic update (same pattern as existing onDrop)
-9. API call with chosen promotion piece
-10. **Play engine move sound** after API response (same pattern as onDrop ~line 384):
-    ```typescript
-    if (result.engineMove?.san) {
-      try {
-        const tempChess = new Chess(userMoveFen);
-        const engineResult = tempChess.move(result.engineMove.san);
-        if (engineResult) {
-          playRef.current(determineSoundType(engineResult, tempChess.inCheck()));
-        }
-      } catch { /* malformed SAN — skip engine sound silently */ }
-    }
-    ```
-11. Error handling: generic user messages, full context to Sentry
+8. **Capture previous game state:** `const previousGame = game;` (needed for rollback on error)
+9. Optimistic update (same pattern as existing onDrop)
+10. API call with chosen promotion piece, using the same `.then`/`.catch`/`.finally` pattern as onDrop (~line 384-409):
+    - `.then`: `setGame(result.game)` + **play engine move sound:**
+      ```typescript
+      if (result.engineMove?.san) {
+        try {
+          const tempChess = new Chess(userMoveFen);
+          const engineResult = tempChess.move(result.engineMove.san);
+          if (engineResult) {
+            playRef.current(determineSoundType(engineResult, tempChess.inCheck()));
+          }
+        } catch { /* malformed SAN — skip engine sound silently */ }
+      }
+      ```
+    - `.catch`: rollback `setGame(previousGame)` + generic error toast + Sentry context
+    - `.finally`: `setIsMoving(false)` — **critical**, without this the board locks permanently on API failure
 
 **No manual aria-live announce.** The existing `movesHistory` change effect (~line 172) automatically announces moves when the game state updates. Adding a manual `announce()` here would cause a double announcement. Let the existing effect handle it.
 
-**useCallback deps:** `[pendingPromotion, game, chess, gameId, playRef]`
+**useCallback deps:** `[pendingPromotion, game, gameId, playRef]` (no `chess` — callback creates its own `testChess = new Chess(game.currentFen)`)
 
 **Note:** This callback mirrors the post-promotion-detection portion of `onDrop` (testChess, sound, optimistic update, API call, engine sound, error handling). Future refactor could extract a shared `submitMove(from, to, promotion?)` helper — deferred to keep this PR focused.
 
@@ -248,6 +258,7 @@ Board reverts to `game.currentFen` automatically since no optimistic update was 
   // In page.tsx - pass prop:
   <KeyboardMoveInput ... isPromoting={!!pendingPromotion} />
   ```
+  **Also add `pendingPromotion` to `onKeyboardMove`'s dep array** (currently `[game, chess, gameId, isMoving, playRef]`) for exhaustive-deps lint compliance.
 - **Timeout effect guard:** Add `|| !!pendingPromotion` to the timeout detection effect's early return:
   ```typescript
   if (!game || game.isGameOver || isMoving || !!pendingPromotion) return;
@@ -259,7 +270,7 @@ Board reverts to `game.currentFen` automatically since no optimistic update was 
     fetchGame();
   }
   ```
-  Prevents tab-switch-back from triggering a refetch that could disrupt the promotion dialog.
+  Prevents tab-switch-back from triggering a refetch that could disrupt the promotion dialog. **Add `pendingPromotion` to this effect's dep array** (currently `[game, fetchGame]`) for exhaustive-deps lint compliance.
 
 ### 3g. Keyboard move promotion handling
 
