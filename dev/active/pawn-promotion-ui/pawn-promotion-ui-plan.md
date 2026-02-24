@@ -1,24 +1,44 @@
 # Pawn Promotion UI - Implementation Plan
 
-**Last Updated:** 2026-02-23 (v7.2 - addressing Opus + Sonnet V7.1 CI review feedback)
+**Last Updated:** 2026-02-23 (v7.3 - incorporate sound effects system from feature/sound-effects-impl)
 
-## Review Feedback Incorporated (v7.2)
+## Review Feedback Incorporated (v7.3)
+
+**v7.3 changes — Sound effects integration:**
+1. Sound system exists on `feature/sound-effects-impl` (will rebase before implementation) ✅
+2. `handlePromotionSelect` must play user move sound after testChess validation ✅
+3. `handlePromotionSelect` must play engine move sound after API response ✅
+4. `onDrop` promotion early-return must skip sound (return false before sound line) ✅
+5. `playRef` added to `handlePromotionSelect` useCallback deps ✅
+6. `handlePromotionCancel` should NOT clear `selectedSquare`/`possibleMoves` (see Sonnet V7.2 note — addressed) ✅
+7. Remove body scroll lock (inappropriate for board-embedded dialog) ✅
+8. `pendingPromotion` added to timeout effect dep array for exhaustive-deps lint ✅
+9. Double SR announcement clarified (rely on existing effect, remove manual `announce`) ✅
 
 **From Opus V7.1 CI review (Feb 23) — APPROVE with minor fixes:**
 1. MEDIUM: `KeyboardMoveInput` not disabled during `pendingPromotion` — add guard to `onKeyboardMove` + disable input ✅
-2. LOW: Sound effect not mentioned in `handlePromotionSelect` — N/A, no sound system in codebase yet (separate feature) ✅
+2. LOW: Sound effect in `handlePromotionSelect` — now included (sound system exists) ✅
 3. LOW: `aria-hidden` implementation detail — specify wrapping `<Chessboard>` in a div ✅
 4. LOW: `announceMove` → `announce` naming mismatch fixed ✅
 5. INFORMATIONAL: z-index stacking — documented (EngineThinkingOverlay has no z-index, PromotionDialog uses z-10) ✅
 
 **From Sonnet V7.1 CI review (Feb 23):**
-1. HIGH: Missing sound in `handlePromotionSelect` — N/A, no sound system in codebase yet ✅
+1. HIGH: Sound in `handlePromotionSelect` — now included ✅
 2. HIGH: Missing `pendingPromotion` guard in `onKeyboardMove` — added ✅
 3. MEDIUM: `aria-hidden` on `<Chessboard>` not directly settable — wrap in div ✅
-4. MEDIUM: `onDrop` sound skip for promotion — N/A, no sound system in codebase yet ✅
+4. MEDIUM: `onDrop` sound skip for promotion — addressed (early return before sound) ✅
 5. LOW: Code duplication in `handlePromotionSelect` — noted as future refactor opportunity ✅
 6. LOW: Black vs white piece glyphs — keep filled (black) glyphs for better cross-platform visibility ✅
 7. MINOR: `announceMove` → `announce` naming mismatch fixed ✅
+
+**From Sonnet V7.2 CI review (Feb 23):**
+1. ~~CRITICAL: Sound system exists~~ — was correct, now incorporated in v7.3 ✅
+2. HIGH: `handlePromotionSelect` deps missing `gameId`, `playRef` — fixed ✅
+3. HIGH: Cancel leaves stale `selectedSquare`/`possibleMoves` — fixed in `handlePromotionCancel` ✅
+4. MEDIUM: Double SR announcement — rely on existing movesHistory effect, remove manual announce ✅
+5. MEDIUM: Body scroll lock inappropriate for board-embedded dialog — removed ✅
+6. LOW: `pendingPromotion` missing from timeout effect dep array — added ✅
+7. LOW: `onDrop` interception point clarified — before sound line ✅
 
 **From local plan-reviewer (Feb 23):**
 1. CRITICAL: Native `<dialog>` with `showModal()` moves element to top layer — breaks absolute positioning. Reverted to `<div role="dialog">` with manual focus trap ✅
@@ -55,13 +75,14 @@ Add an interactive pawn promotion dialog that lets users choose which piece to p
 - Backend already validates promotion via `z.enum(['q','r','b','n']).optional()` in shared package
 - No promotion UI component exists
 - **Player always plays white** — engine handles black promotions automatically without UI
-- **No sound system exists yet** — sound effects are a separate planned feature; this plan does not include sound
+- **Sound system exists** on `feature/sound-effects-impl` — uses `playRef.current(determineSoundType(moveResult, inCheck))` pattern. Branch will be rebased before implementation. Sound must be played for promotion moves (user + engine).
 
 ## Files to Modify
 
 | File | Action |
 |------|--------|
 | `apps/frontend/src/app/game/[id]/components/PromotionDialog.tsx` | **CREATE** - New promotion piece picker component |
+| `apps/frontend/src/app/game/[id]/components/KeyboardMoveInput.tsx` | **EDIT** - Add `isPromoting` prop for visual disable during promotion |
 | `apps/frontend/src/app/game/[id]/components/index.ts` | **EDIT** - Add PromotionDialog export |
 | `apps/frontend/src/app/game/[id]/page.tsx` | **EDIT** - Add pendingPromotion state, modify onDrop/onSquareClick/onKeyboardMove, render dialog |
 
@@ -124,14 +145,7 @@ The `<div role="dialog">` approach with manual focus management is correct for t
 - Backdrop: `bg-black/30` over the board area (same as EngineThinkingOverlay)
 - `prefers-reduced-motion`: skip fade-in animation via `motion-safe:` utilities
 
-**Scroll lock (Sonnet feedback):**
-```typescript
-useEffect(() => {
-  const prev = document.body.style.overflow;
-  document.body.style.overflow = 'hidden';
-  return () => { document.body.style.overflow = prev; };
-}, []);
-```
+**No body scroll lock.** The dialog is a board-embedded overlay (`position: absolute` inside the board container which has `overflow: hidden`). Locking body scroll would disrupt mobile users who need to scroll to see the board. The board's own `overflow-hidden` is sufficient.
 
 ## Step 2: Update index.ts
 
@@ -147,13 +161,23 @@ const [pendingPromotion, setPendingPromotion] = useState<PendingPromotion | null
 ### 3b. Modify onDrop
 
 When a promotion is detected, instead of auto-promoting to queen:
-1. Validate the move is legal (using testChess with promotion='q' just for legality check)
-2. Set `pendingPromotion = { from, to }`
-3. Return `false` — piece snaps back to source square (no optimistic update yet)
+1. Detect promotion: `piece.pieceType[1] === 'P'` and target is rank 8 (same check as current code ~line 329)
+2. Validate the move is legal (using testChess with promotion='q' just for legality check)
+3. Set `pendingPromotion = { from, to }`
+4. Return `false` — piece snaps back to source square (no optimistic update yet)
 
-**Important:** The promotion detection and `return false` must happen BEFORE any sound/optimistic update logic in the existing `onDrop` flow. The early return ensures no side effects occur.
+**Insertion point:** The promotion intercept must go AFTER the `testChess.move()` legality check but BEFORE the sound effect call at ~line 357 (`playRef.current(determineSoundType(...))`). The `return false` ensures no sound plays and no optimistic update occurs:
+```typescript
+// After testChess.move() succeeds for legality check...
+if (isPromotion) {
+  setPendingPromotion({ from: sourceSquare, to: targetSquare });
+  return false; // ← exits before sound + optimistic update
+}
+// Sound plays here for non-promotion moves only
+playRef.current(determineSoundType(moveResult, testChess.inCheck()));
+```
 
-**Dep array:** Add `pendingPromotion` to `onDrop`'s dependency array.
+**Dep array:** Add `pendingPromotion` to `onDrop`'s dependency array (required because Step 3f adds `pendingPromotion` to the early return guard).
 
 ### 3c. Modify onSquareClick — Guard only
 
@@ -168,36 +192,67 @@ When user selects a piece from the dialog:
 2. Capture `from`/`to` from `pendingPromotion` into local vars (before clearing state)
 3. **First:** `setPendingPromotion(null)` (closes dialog — clear before setIsMoving to avoid simultaneous overlays)
 4. **Then:** `setIsMoving(true)` (blocks board interaction)
-5. Validate move with chosen piece via testChess
-6. Optimistic update (same pattern as existing onDrop)
-7. API call with chosen promotion piece
-8. Announce via aria-live: `announce("Pawn promoted to queen")` etc.
-9. Error handling: generic user messages, full context to Sentry
+5. Validate move with chosen piece via testChess: `testChess.move({ from, to, promotion: piece })`
+6. **Play user move sound** (same pattern as onDrop ~line 357):
+   ```typescript
+   try {
+     playRef.current(determineSoundType(moveResult, testChess.inCheck()));
+   } catch { /* sound must never interfere with move flow */ }
+   ```
+7. Capture `userMoveFen = testChess.fen()` (needed for engine sound detection)
+8. Optimistic update (same pattern as existing onDrop)
+9. API call with chosen promotion piece
+10. **Play engine move sound** after API response (same pattern as onDrop ~line 384):
+    ```typescript
+    if (result.engineMove?.san) {
+      try {
+        const tempChess = new Chess(userMoveFen);
+        const engineResult = tempChess.move(result.engineMove.san);
+        if (engineResult) {
+          playRef.current(determineSoundType(engineResult, tempChess.inCheck()));
+        }
+      } catch { /* malformed SAN — skip engine sound silently */ }
+    }
+    ```
+11. Error handling: generic user messages, full context to Sentry
 
-**useCallback deps:** `[pendingPromotion, game, chess, announce]`
+**No manual aria-live announce.** The existing `movesHistory` change effect (~line 172) automatically announces moves when the game state updates. Adding a manual `announce()` here would cause a double announcement. Let the existing effect handle it.
 
-**Note:** This callback mirrors the post-promotion-detection portion of `onDrop` (testChess, optimistic update, API call, announce, error handling). Future refactor could extract a shared `submitMove(from, to, promotion?)` helper — deferred to keep this PR focused.
+**useCallback deps:** `[pendingPromotion, game, chess, gameId, playRef]`
+
+**Note:** This callback mirrors the post-promotion-detection portion of `onDrop` (testChess, sound, optimistic update, API call, engine sound, error handling). Future refactor could extract a shared `submitMove(from, to, promotion?)` helper — deferred to keep this PR focused.
 
 ### 3e. Add handlePromotionCancel callback (wrapped in useCallback)
 
-Just `setPendingPromotion(null)`. Board reverts to `game.currentFen` automatically since no optimistic update was applied.
+Clear all promotion-related state:
+```typescript
+setPendingPromotion(null);
+setSelectedSquare(null);
+setPossibleMoves([]);
+```
+Board reverts to `game.currentFen` automatically since no optimistic update was applied. Must also clear `selectedSquare`/`possibleMoves` because the click-to-move path leaves stale highlights from the source square selection — the `currentFen` effect won't fire since FEN hasn't changed, so highlights won't auto-clear.
 
-**useCallback deps:** `[]` (no deps needed — only clears state)
+**useCallback deps:** `[]` (only clears state via setters)
 
 ### 3f. Add guards
 
 - `allowDragging`: add `&& !pendingPromotion`
 - `onSquareClick`: add `if (pendingPromotion) return;` guard (this is the ONLY change to onSquareClick — see 3c)
 - `onDrop`: add `pendingPromotion` to the early return guard
-- **`onKeyboardMove` guard:** Add `if (pendingPromotion) return;` at the top of `onKeyboardMove`. This prevents a keyboard move from racing with an open promotion dialog. The keyboard input should also be disabled — add `|| !!pendingPromotion` to the `disabled` condition passed to `KeyboardMoveInput`:
+- **`onKeyboardMove` guard:** Add `if (pendingPromotion) return;` at the top of `onKeyboardMove`. This prevents a keyboard move from racing with an open promotion dialog. Also visually disable the keyboard input during promotion — `KeyboardMoveInput` currently computes `disabled` internally from `isMoving`/`isUserTurn`/`isGameOver`. Add a new `isPromoting` prop to `KeyboardMoveInputProps`:
   ```typescript
-  disabled={!isUserTurn || isGameOver || isMoving || !!pendingPromotion}
+  // In KeyboardMoveInput.tsx - add to props interface:
+  isPromoting: boolean;
+  // In disabled computation:
+  const disabled = !isUserTurn || isGameOver || isMoving || isPromoting;
+  // In page.tsx - pass prop:
+  <KeyboardMoveInput ... isPromoting={!!pendingPromotion} />
   ```
 - **Timeout effect guard:** Add `|| !!pendingPromotion` to the timeout detection effect's early return:
   ```typescript
   if (!game || game.isGameOver || isMoving || !!pendingPromotion) return;
   ```
-  This prevents `fetchGame()` from firing while the promotion dialog is open, which would cause `GameOverModal` and `PromotionDialog` to render simultaneously.
+  This prevents `fetchGame()` from firing while the promotion dialog is open, which would cause `GameOverModal` and `PromotionDialog` to render simultaneously. **Add `pendingPromotion` to the effect's dependency array** for exhaustive-deps lint compliance.
 - **Visibility change handler guard:** Add `|| !!pendingPromotion` to the visibility change handler:
   ```typescript
   if (document.visibilityState === 'visible' && game && !game.isGameOver && !pendingPromotion) {
@@ -260,6 +315,10 @@ Inside the board container div:
 | Board orientation | White-at-bottom only | Player always plays white; engine handles black promotions without UI |
 | Keyboard during promotion | Input disabled + `onKeyboardMove` guarded | Prevents race conditions between keyboard moves and promotion dialog |
 | aria-hidden on board | Wrapper div around `<Chessboard>` | Can't set attribute directly on third-party component |
+| Sound effects | Same pattern as onDrop | `playRef.current(determineSoundType(...))` for user + engine moves; try/catch wrapper |
+| SR announcements | Rely on existing movesHistory effect | No manual `announce()` in handlePromotionSelect — avoids double announcement |
+| Body scroll lock | None | Board-embedded overlay; board's `overflow-hidden` is sufficient; body lock disrupts mobile |
+| Cancel clears highlights | `setSelectedSquare(null)` + `setPossibleMoves([])` | Click-to-move leaves stale highlights; FEN doesn't change on cancel so effect won't auto-clear |
 | Code duplication | Accept in this PR, refactor later | `handlePromotionSelect` mirrors onDrop; extract shared helper in future PR |
 
 ## Verification
@@ -278,6 +337,7 @@ Inside the board container div:
    - Test cancel (Escape) → pawn returns
    - Test keyboard navigation (arrows, Enter, Escape)
    - Verify KeyboardMoveInput is disabled while dialog is open
+   - Verify promotion move plays sound (user move + engine response)
    - Test dark mode appearance
    - Test mobile viewport
 
@@ -305,4 +365,4 @@ Inside the board container div:
 - Black piece promotion UI (player always plays white; engine auto-promotes)
 - axe-core e2e test for game page with promotion dialog open (requires mocked game state — future enhancement)
 - Extract shared `submitMove` helper from onDrop + handlePromotionSelect (future refactor)
-- Sound effects for promotion (no sound system exists yet — separate feature)
+- Promotion-specific sound (e.g., unique "coronation" sound) — uses standard move/capture/check sounds from existing system
