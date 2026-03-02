@@ -1,8 +1,31 @@
 # Pawn Promotion UI - Implementation Plan
 
-**Last Updated:** 2026-02-24 (v7.4 - fix 4 MEDIUMs from Opus+Sonnet V7.3 CI review)
+**Last Updated:** 2026-03-03 (v7.7 - fix 2 MEDIUMs from local plan-reviewer V7.6)
 
-## Review Feedback Incorporated (v7.4)
+## Review Feedback Incorporated (v7.7)
+
+**From local plan-reviewer V7.6 (Mar 3) — APPROVE with 2 MEDIUMs, 3 LOWs:**
+1. MEDIUM: Animation classes `animate-in`, `slide-in-from-top-2` come from `tailwindcss-animate` which is NOT installed — produces no CSS. **Fix:** Use simple CSS transition with mount state toggle instead of non-existent utility classes ✅
+2. MEDIUM: Existing `PromotionDialog.tsx` file diverges from plan — has body scroll lock, uses `<button>` backdrop, missing explicit text color. **Fix:** Plan already documents correct behavior; added explicit reconciliation note to Step 1 ✅
+- LOW: Resign/Save buttons still clickable during promotion — harmless, noted in Ignored Low-Priority Items ✅
+- LOW: `eslint-disable` on `role="dialog"` `onKeyDown` — acceptable, add code comment explaining why ✅
+- LOW: react-chessboard types confirmed correct — no action needed
+
+**From Opus V7.5 CI review (Mar 3) — APPROVE with 0 MEDIUMs, 3 LOWs:**
+- All MEDIUMs self-resolved during review (deps correct on inspection; clock inconsistency already fixed in v7.5)
+- LOW: Backdrop `<button tabIndex={-1}>` → changed to `<div aria-hidden="true">` for semantic correctness ✅
+- LOW: No unit tests for PromotionDialog — acknowledged, deferred (listed in Ignored Low-Priority Items)
+- LOW: `onDrop` dep array adding `pendingPromotion` may cause Chessboard re-render on dialog open/close — negligible in practice (board already updating), noted in Risk Assessment ✅
+
+**From Sonnet V7.5 CI review (Mar 3):** Timed out on pawn-promotion plan (only reviewed sound-effects plan — irrelevant to this PR).
+
+**v7.5 changes (Feb 24):**
+- Clock ticking effect guarded with `pendingPromotion` (pause clock while dialog open) — fixes Opus V7.4 inconsistency ✅
+
+**From Opus V7.4 CI review (Feb 24) — APPROVE:**
+1. MEDIUM: Clock ticks to 0:00 visually but timeout fetch suppressed — inconsistent. **Fix:** Also guard clock ticking effect with `pendingPromotion` (pause clock while dialog open) ✅
+
+**From Sonnet V7.4 CI review (Feb 24):** Timed out on pawn-promotion plan (reviewed sound-effects plan instead — irrelevant to this PR).
 
 **From Opus V7.3 CI review (Feb 24) — APPROVE:**
 1. MEDIUM: Remove `chess` from `handlePromotionSelect` deps (creates own testChess) ✅
@@ -146,12 +169,18 @@ The `<div role="dialog">` approach with manual focus management is correct for t
 - Arrow key navigation between pieces (up/down cycle)
 - Enter/Space selects, Escape cancels
 - Focus trap: Tab wraps within the 4 buttons (manual onKeyDown handler)
-- Backdrop click cancels (via backdrop `<button>` with `tabIndex={-1}`)
+- Backdrop click cancels (via backdrop `<div>` with `onClick={onCancel}` and `aria-hidden="true"` — semantically correct for a non-interactive overlay; avoids screen reader announcing a phantom button)
 
 **Styling:**
 - Buttons: `bg-white dark:bg-zinc-800`, `text-zinc-900 dark:text-zinc-100`, emerald hover highlight
 - Backdrop: `bg-black/30` over the board area (same as EngineThinkingOverlay)
-- `prefers-reduced-motion`: skip fade-in animation via `motion-safe:` utilities
+- **Animation:** Use CSS `transition` with a mount state toggle (`useState` flipped in `useEffect`) instead of `tailwindcss-animate` utility classes (which are NOT installed in this project). Apply `opacity-0 → opacity-100` and `translate-y-[-8px] → translate-y-0` transitions via `transition-all duration-150`. Guard with `motion-safe:` prefix for `prefers-reduced-motion`. Do NOT use `animate-in`, `slide-in-from-top-2`, or similar — these produce no CSS without `tailwindcss-animate`.
+
+**Reconciliation note:** The existing `PromotionDialog.tsx` file on the branch predates several review iterations and must be updated during implementation:
+- Remove body scroll lock `useEffect` (plan says no body scroll lock)
+- Change backdrop from `<button tabIndex={-1}>` to `<div aria-hidden="true" onClick={onCancel}>`
+- Add `text-zinc-900 dark:text-zinc-100` to piece button classes
+- Replace `animate-in fade-in slide-in-from-top-2` with CSS transition approach above
 
 **No body scroll lock.** The dialog is a board-embedded overlay (`position: absolute` inside the board container which has `overflow: hidden`). Locking body scroll would disrupt mobile users who need to scroll to see the board. The board's own `overflow-hidden` is sufficient.
 
@@ -259,6 +288,7 @@ Board reverts to `game.currentFen` automatically since no optimistic update was 
   <KeyboardMoveInput ... isPromoting={!!pendingPromotion} />
   ```
   **Also add `pendingPromotion` to `onKeyboardMove`'s dep array** (currently `[game, chess, gameId, isMoving, playRef]`) for exhaustive-deps lint compliance.
+- **Clock ticking effect guard:** Add `|| !!pendingPromotion` to the clock countdown interval effect's early return, pausing the visual clock while the promotion dialog is open. This is consistent with the timeout suppression — without this guard, the clock visually reaches 0:00 but the timeout doesn't fire, creating confusing UX. **Add `pendingPromotion` to the clock effect's dep array** for exhaustive-deps lint compliance.
 - **Timeout effect guard:** Add `|| !!pendingPromotion` to the timeout detection effect's early return:
   ```typescript
   if (!game || game.isGameOver || isMoving || !!pendingPromotion) return;
@@ -311,7 +341,7 @@ Inside the board container div:
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
 | State management | Simple `pendingPromotion` state | No full state machine needed, just one new state var |
-| Clock during promotion | Keeps running | Realistic chess behavior, simpler (no extra state) |
+| Clock during promotion | Paused (visually frozen) | Clock ticking effect guarded with `pendingPromotion` — consistent with timeout suppression. Prevents confusing UX where clock shows 0:00 but timeout doesn't fire. |
 | Cancel behavior | Clear pendingPromotion | No chess.undo chain needed — move not committed until selection |
 | onDrop return for promotion | `return false` | Piece snaps back to source; no optimistic board update until selection |
 | Piece glyphs | Filled Unicode symbols ♛♜♝♞ | More visible cross-platform than outline glyphs ♕♖♗♘ |
@@ -361,9 +391,10 @@ Inside the board container div:
 | Click-to-move promotion detection | Low | Low | Guard-only in onSquareClick, onDrop handles detection |
 | Race condition with engine response | Low | High | Board disabled + isMoving blocks interaction |
 | Race condition keyboard + dialog | Low | High | `onKeyboardMove` guarded + `KeyboardMoveInput` disabled during promotion |
-| Clock timeout during promotion | Low | High | Timeout + visibility effects guarded with `!!pendingPromotion` |
+| Clock timeout during promotion | Low | High | Clock ticking + timeout + visibility effects all guarded with `!!pendingPromotion` (consistent behavior) |
 | API failure during promotion | Medium | High | Generic error message + Sentry tracking |
 | Screen reader focus escape | Low | Medium | Manual Tab trap cycles through 4 buttons; `aria-modal` + `aria-hidden` wrapper on board |
+| Chessboard re-render on dialog open/close | Low | Low | `pendingPromotion` in `onDrop` deps causes recreation; negligible since board already updating during move flow |
 | Clock reaches zero while dialog open | Low | Medium | Backend is source of truth for timeout; API call fails gracefully |
 
 ## Ignored Low-Priority Items
@@ -377,3 +408,4 @@ Inside the board container div:
 - axe-core e2e test for game page with promotion dialog open (requires mocked game state — future enhancement)
 - Extract shared `submitMove` helper from onDrop + handlePromotionSelect (future refactor)
 - Promotion-specific sound (e.g., unique "coronation" sound) — uses standard move/capture/check sounds from existing system
+- Disable resign/save buttons during promotion dialog (harmless if clicked — resign saves current state, save saves unchanged state)
