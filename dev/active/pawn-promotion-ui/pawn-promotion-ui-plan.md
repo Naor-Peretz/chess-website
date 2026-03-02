@@ -1,8 +1,22 @@
 # Pawn Promotion UI - Implementation Plan
 
-**Last Updated:** 2026-03-03 (v7.7 - fix 2 MEDIUMs from local plan-reviewer V7.6)
+**Last Updated:** 2026-03-03 (v7.8 - address 5 MEDIUM+ issues from Opus+Sonnet V7.7 CI reviews)
 
-## Review Feedback Incorporated (v7.7)
+## Review Feedback Incorporated (v7.8)
+
+**From Sonnet V7.7 CI review (Mar 3) — APPROVE with fixes (1 CRITICAL, 1 HIGH, 2 MEDIUM, 2 LOW):**
+1. ~~CRITICAL: z-index stacking — header overlapping promotion dialog on mobile.~~ Sonnet claims `overflow-hidden` creates a stacking context — **incorrect** (`overflow-hidden` alone does NOT create a stacking context). However, the underlying concern has merit: on mobile, if the board top is near the viewport top, the sticky header (`z-10`) and the dialog's `z-10` both participate in the root stacking context. **Fix:** Add conditional `z-20` on board container when `pendingPromotion` is truthy — elevates entire board above header during promotion ✅
+2. HIGH: `onSquareClick` missing `isMoving` guard — during API call window, clicks can update highlights. **Fix:** Add `|| isMoving` to early return guard + `isMoving` to deps array ✅
+3. MEDIUM: `handlePromotionCancel` highlight-clear redundancy — redundant for click-to-move but needed for drag-and-drop path. **Fix:** Added clarifying comment ✅
+4. MEDIUM: `motion-safe:` prefix redundancy — `globals.css` already has `prefers-reduced-motion` override. **Fix:** Added documentation note in Step 1 styling section ✅
+- LOW: `PendingPromotion` type location — already defined in `PromotionDialog.tsx` and re-exported from `index.ts` (Step 2)
+- LOW: Sound system "rebase" note stale — updated context section ✅
+
+**From Opus V7.7 CI review (Mar 3) — APPROVE with 1 MEDIUM, 3 LOWs:**
+1. MEDIUM: `handlePromotionSelect` stale `game` closure — theoretical risk since guards prevent game mutation while dialog is open. **Fix:** Added comment documenting the assumption in Step 3d ✅
+- LOW: `piece.pieceType[1] === 'P'` fragile accessor — existing pattern, not a regression
+- LOW: `aria-hidden` may hide react-chessboard live regions — react-chessboard has none; project uses external `AriaLiveProvider`
+- LOW: No explicit resign-during-promotion test — added to verification checklist + render guard ✅
 
 **From local plan-reviewer V7.6 (Mar 3) — APPROVE with 2 MEDIUMs, 3 LOWs:**
 1. MEDIUM: Animation classes `animate-in`, `slide-in-from-top-2` come from `tailwindcss-animate` which is NOT installed — produces no CSS. **Fix:** Use simple CSS transition with mount state toggle instead of non-existent utility classes ✅
@@ -106,7 +120,7 @@ Add an interactive pawn promotion dialog that lets users choose which piece to p
 - Backend already validates promotion via `z.enum(['q','r','b','n']).optional()` in shared package
 - No promotion UI component exists
 - **Player always plays white** — engine handles black promotions automatically without UI
-- **Sound system exists** on `feature/sound-effects-impl` — uses `playRef.current(determineSoundType(moveResult, inCheck))` pattern. Branch will be rebased before implementation. Sound must be played for promotion moves (user + engine).
+- **Sound system exists** (merged to `main`) — uses `playRef.current(determineSoundType(moveResult, inCheck))` pattern. Sound must be played for promotion moves (user + engine).
 
 ## Files to Modify
 
@@ -174,7 +188,7 @@ The `<div role="dialog">` approach with manual focus management is correct for t
 **Styling:**
 - Buttons: `bg-white dark:bg-zinc-800`, `text-zinc-900 dark:text-zinc-100`, emerald hover highlight
 - Backdrop: `bg-black/30` over the board area (same as EngineThinkingOverlay)
-- **Animation:** Use CSS `transition` with a mount state toggle (`useState` flipped in `useEffect`) instead of `tailwindcss-animate` utility classes (which are NOT installed in this project). Apply `opacity-0 → opacity-100` and `translate-y-[-8px] → translate-y-0` transitions via `transition-all duration-150`. Guard with `motion-safe:` prefix for `prefers-reduced-motion`. Do NOT use `animate-in`, `slide-in-from-top-2`, or similar — these produce no CSS without `tailwindcss-animate`.
+- **Animation:** Use CSS `transition` with a mount state toggle (`useState` flipped in `useEffect`) instead of `tailwindcss-animate` utility classes (which are NOT installed in this project). Apply `opacity-0 → opacity-100` and `translate-y-[-8px] → translate-y-0` transitions via `transition-all duration-150`. Guard with `motion-safe:` prefix for `prefers-reduced-motion`. Do NOT use `animate-in`, `slide-in-from-top-2`, or similar — these produce no CSS without `tailwindcss-animate`. **Note:** The `motion-safe:` prefix on `duration-150` is technically redundant because `globals.css` already sets `transition-duration: 0.01ms !important` under `prefers-reduced-motion`. However, keeping it is defensive — it documents the intent and protects against future `globals.css` changes.
 
 **Reconciliation note:** The existing `PromotionDialog.tsx` file on the branch predates several review iterations and must be updated during implementation:
 - Remove body scroll lock `useEffect` (plan says no body scroll lock)
@@ -219,7 +233,17 @@ playRef.current(determineSoundType(moveResult, testChess.inCheck()));
 ### 3c. Modify onSquareClick — Guard only
 
 **No independent promotion detection.** `onSquareClick` already delegates to `onDrop`, which handles the promotion interception. Changes are guard-only:
-- Add `if (pendingPromotion) return;` at the top
+- Add `|| isMoving || !!pendingPromotion` to the existing early return guard at line 489:
+  ```typescript
+  if (!game || !chess || game.isGameOver || game.currentTurn !== 'w' || isMoving || !!pendingPromotion) {
+    setSelectedSquare(null);
+    setPossibleMoves([]);
+    return;
+  }
+  ```
+  The `isMoving` guard prevents clicks from updating `selectedSquare`/`possibleMoves` during the API call window (after `pendingPromotion` is cleared but before `setIsMoving(false)` in `.finally`). Without this, spurious highlights appear that won't auto-clear until the next FEN change. **Note:** `onDrop` already has this guard (line 324), but `onSquareClick` was missing it.
+- **Add `isMoving` and `pendingPromotion` to `onSquareClick`'s dep array.**
+- **Click-to-move promotion path:** When a user clicks source then target square, `onSquareClick` delegates to `onDrop` (line 508), which detects the promotion and sets `pendingPromotion`. The guard added here is purely **defensive** — it blocks subsequent clicks while the dialog is already open. React batches the `setPendingPromotion` state update, so `pendingPromotion` is still `null` during the initial promotion-triggering click.
 - That's it — `onDrop` handles all promotion detection for both drag-and-drop and click-to-move paths
 
 ### 3d. Add handlePromotionSelect callback (wrapped in useCallback)
@@ -259,6 +283,8 @@ When user selects a piece from the dialog:
 
 **useCallback deps:** `[pendingPromotion, game, gameId, playRef]` (no `chess` — callback creates its own `testChess = new Chess(game.currentFen)`)
 
+**Stale closure assumption:** `game` is captured via closure when the callback executes, not when the dialog opens. Between dialog open and piece selection, `game` could theoretically be updated by an effect. This is safe because all refetch/mutation paths are guarded with `pendingPromotion`: timeout effect, visibility change handler, keyboard input, and drag/click handlers all bail out when `pendingPromotion` is set. **Add a code comment:** `// Safe: guards prevent game mutation while pendingPromotion is set`
+
 **Note:** This callback mirrors the post-promotion-detection portion of `onDrop` (testChess, sound, optimistic update, API call, engine sound, error handling). Future refactor could extract a shared `submitMove(from, to, promotion?)` helper — deferred to keep this PR focused.
 
 ### 3e. Add handlePromotionCancel callback (wrapped in useCallback)
@@ -269,14 +295,14 @@ setPendingPromotion(null);
 setSelectedSquare(null);
 setPossibleMoves([]);
 ```
-Board reverts to `game.currentFen` automatically since no optimistic update was applied. Must also clear `selectedSquare`/`possibleMoves` because the click-to-move path leaves stale highlights from the source square selection — the `currentFen` effect won't fire since FEN hasn't changed, so highlights won't auto-clear.
+Board reverts to `game.currentFen` automatically since no optimistic update was applied. Must also clear `selectedSquare`/`possibleMoves` because the click-to-move path leaves stale highlights from the source square selection — the `currentFen` effect won't fire since FEN hasn't changed, so highlights won't auto-clear. **Note:** The `setSelectedSquare(null)` / `setPossibleMoves([])` calls are redundant for the click-to-move path (which already clears highlights in `onSquareClick` before the promotion dialog opens), but are needed for the drag-and-drop path (which doesn't clear highlights before the dialog). **Add a code comment** explaining this.
 
 **useCallback deps:** `[]` (only clears state via setters)
 
 ### 3f. Add guards
 
 - `allowDragging`: add `&& !pendingPromotion`
-- `onSquareClick`: add `if (pendingPromotion) return;` guard (this is the ONLY change to onSquareClick — see 3c)
+- `onSquareClick`: add `|| isMoving || !!pendingPromotion` to the existing early return guard (combined guard as described in Step 3c — NOT a separate `if` statement)
 - `onDrop`: add `pendingPromotion` to the early return guard
 - **`onKeyboardMove` guard:** Add `if (pendingPromotion) return;` at the top of `onKeyboardMove`. This prevents a keyboard move from racing with an open promotion dialog. Also visually disable the keyboard input during promotion — `KeyboardMoveInput` currently computes `disabled` internally from `isMoving`/`isUserTurn`/`isGameOver`. Add a new `isPromoting` prop to `KeyboardMoveInputProps`:
   ```typescript
@@ -312,26 +338,33 @@ Board reverts to `game.currentFen` automatically since no optimistic update was 
 ### 3h. Render PromotionDialog and aria-hidden wrapper
 
 Inside the board container div:
-1. **Wrap `<Chessboard>` in a div** with `aria-hidden={!!pendingPromotion}`. This prevents screen readers from navigating board squares while the promotion dialog is focused. Cannot set `aria-hidden` directly on `<Chessboard>` since it's a third-party React component.
-2. Render `PromotionDialog` after the Chessboard wrapper, alongside EngineThinkingOverlay:
+1. **Add conditional `z-20` to the board container** when `pendingPromotion` is truthy. This elevates the board's stacking context above the sticky header (`z-10`) during promotion, preventing the header from overlapping the top promotion buttons on mobile. Without this, both the header and the dialog's `z-10` participate in the root stacking context and the header wins (or ties, which is UA-dependent):
+   ```tsx
+   <div className={`relative ... ${pendingPromotion ? 'z-20' : ''}`}>
+   ```
+2. **Wrap `<Chessboard>` in a div** with `aria-hidden={!!pendingPromotion}`. This prevents screen readers from navigating board squares while the promotion dialog is focused. Cannot set `aria-hidden` directly on `<Chessboard>` since it's a third-party React component.
+3. Render `PromotionDialog` after the Chessboard wrapper, alongside EngineThinkingOverlay. **Guard with `!game?.isGameOver`** to auto-dismiss if the game ends externally (e.g., resign while dialog is open):
 
 ```tsx
-{/* Board with aria-hidden during promotion */}
-<div aria-hidden={!!pendingPromotion || undefined}>
-  <Chessboard ... />
+{/* Board container - z-20 during promotion to stay above sticky header */}
+<div className={`relative ... ${pendingPromotion ? 'z-20' : ''}`}>
+  {/* Board with aria-hidden during promotion */}
+  <div aria-hidden={!!pendingPromotion || undefined}>
+    <Chessboard ... />
+  </div>
+
+  {/* Overlays */}
+  {isMoving && game?.currentTurn === 'b' && <EngineThinkingOverlay />}
+
+  {pendingPromotion && !game?.isGameOver && (
+    <PromotionDialog
+      pending={pendingPromotion}
+      boardSize={boardSize}
+      onSelect={handlePromotionSelect}
+      onCancel={handlePromotionCancel}
+    />
+  )}
 </div>
-
-{/* Overlays */}
-{isMoving && game?.currentTurn === 'b' && <EngineThinkingOverlay />}
-
-{pendingPromotion && (
-  <PromotionDialog
-    pending={pendingPromotion}
-    boardSize={boardSize}
-    onSelect={handlePromotionSelect}
-    onCancel={handlePromotionCancel}
-  />
-)}
 ```
 
 **Note:** `aria-hidden` uses `|| undefined` to avoid rendering `aria-hidden="false"` when not promoting (React omits attributes that are `undefined`).
@@ -346,11 +379,11 @@ Inside the board container div:
 | onDrop return for promotion | `return false` | Piece snaps back to source; no optimistic board update until selection |
 | Piece glyphs | Filled Unicode symbols ♛♜♝♞ | More visible cross-platform than outline glyphs ♕♖♗♘ |
 | Dialog element | `<div role="dialog">` with manual focus trap | Native `<dialog>` `showModal()` moves to top layer, breaking absolute positioning within board container |
-| Dialog z-index | `z-10` | EngineThinkingOverlay has none; both can't appear simultaneously |
+| Dialog z-index | `z-10` on dialog, conditional `z-20` on board container | Board container elevated above header during promotion; EngineThinkingOverlay has none; both can't appear simultaneously |
 | Dialog position | Absolute within board container | Same pattern as EngineThinkingOverlay |
 | Input validation | TypeScript type + backend Zod | 4 hardcoded buttons with `'q'\|'r'\|'b'\|'n'` type; backend validates via shared schema |
 | Error messages | Generic to user, detailed to Sentry | Never expose userId, FEN, version in user-facing messages |
-| onSquareClick changes | Guard-only | No duplicate promotion detection — onDrop handles it for both paths |
+| onSquareClick changes | Guard-only (`isMoving` + `pendingPromotion`) | No duplicate promotion detection — onDrop handles it for both paths; `isMoving` prevents spurious highlights during API call |
 | Text color on symbols | Explicit `text-zinc-900 dark:text-zinc-100` | iOS Safari contrast for Unicode symbols |
 | State update order | `setPendingPromotion(null)` before `setIsMoving(true)` | Avoid brief simultaneous render of both overlays |
 | Board orientation | White-at-bottom only | Player always plays white; engine handles black promotions without UI |
@@ -379,8 +412,9 @@ Inside the board container div:
    - Test keyboard navigation (arrows, Enter, Escape)
    - Verify KeyboardMoveInput is disabled while dialog is open
    - Verify promotion move plays sound (user move + engine response)
+   - Test resign while promotion dialog is open → dialog auto-dismisses
    - Test dark mode appearance
-   - Test mobile viewport
+   - Test mobile viewport (verify header doesn't overlap promotion buttons)
 
 ## Risk Assessment
 
