@@ -6,6 +6,8 @@
 
 import { GoogleGenAI } from '@google/genai';
 import fs from 'fs';
+import os from 'os';
+import path from 'path';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
@@ -82,7 +84,9 @@ async function main() {
   }
 
   // Write review to file for GitHub Action to pick up
-  const outputPath = '/tmp/plan-review-gemini.md';
+  const outputPath =
+    process.env.REVIEW_OUTPUT_PATH ||
+    path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'plan-review-gemini-')), 'review.md');
   fs.writeFileSync(outputPath, fullReview);
   console.log(`Review written to ${outputPath}`);
 

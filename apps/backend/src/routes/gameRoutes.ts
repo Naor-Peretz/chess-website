@@ -1,11 +1,13 @@
 import { Router } from 'express';
 import { GameController } from '../controllers/GameController';
 import { authMiddleware } from '../middleware/authMiddleware';
+import { generalLimiter } from '../middleware/rateLimiter';
 
 const router: Router = Router();
 const controller = new GameController();
 
-// Protect all game routes - require authentication
+// Protect all game routes - rate limit first, then authenticate
+router.use(generalLimiter);
 router.use(authMiddleware);
 
 // POST /api/games - Create new game

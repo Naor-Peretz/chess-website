@@ -3,6 +3,25 @@ import * as Sentry from '@sentry/node';
 import { services } from '../services/serviceContainer';
 import type { ApiError } from '@chess-website/shared';
 
+/**
+ * Extracts the bearer token from the Authorization header or cookie.
+ * Returns the token string, or an empty string if not present.
+ */
+function extractToken(req: Request): string {
+  const authHeader = req.headers.authorization;
+  const cookieToken = req.cookies?.token;
+
+  if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+    return authHeader.slice(7);
+  }
+
+  if (typeof cookieToken === 'string' && cookieToken.length > 0) {
+    return cookieToken;
+  }
+
+  return '';
+}
+
 // Extend Express Request type to include user info
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -26,22 +45,9 @@ export async function authMiddleware(
   next: NextFunction
 ): Promise<void> {
   try {
-    // Extract token from Authorization header or cookie
-    const authHeader = req.headers.authorization;
-    const cookieToken = req.cookies?.token;
+    const token = extractToken(req);
 
-    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : cookieToken;
-
-    if (!token) {
-      const response: ApiError = {
-        success: false,
-        error: 'Authentication required',
-        code: 'UNAUTHORIZED',
-      };
-      res.status(401).json(response);
-      return;
-    }
-
+    // Always verify through the auth service - it handles empty/invalid tokens
     const payload = await services.authService.verifyToken(token);
 
     if (!payload) {
@@ -91,22 +97,19 @@ export async function optionalAuthMiddleware(
   next: NextFunction
 ): Promise<void> {
   try {
-    const authHeader = req.headers.authorization;
-    const cookieToken = req.cookies?.token;
+    const token = extractToken(req);
 
-    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : cookieToken;
+    // Always verify through the auth service - it handles empty/invalid tokens
+    const payload = await services.authService.verifyToken(token);
 
-    if (token) {
-      const payload = await services.authService.verifyToken(token);
-      if (payload) {
-        req.userId = payload.userId;
-        req.userEmail = payload.email;
+    if (payload) {
+      req.userId = payload.userId;
+      req.userEmail = payload.email;
 
-        Sentry.setUser({
-          id: payload.userId,
-          email: payload.email,
-        });
-      }
+      Sentry.setUser({
+        id: payload.userId,
+        email: payload.email,
+      });
     }
 
     next();

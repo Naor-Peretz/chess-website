@@ -33,3 +33,19 @@ export const generalLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
+
+/**
+ * Permissive rate limiter for health check endpoints.
+ * High limit to avoid breaking load balancer probes while still preventing extreme abuse.
+ */
+export const healthLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 1000, // Very permissive - won't break monitoring
+  message: {
+    success: false,
+    error: 'Too many requests, please try again later',
+    code: 'RATE_LIMIT_EXCEEDED',
+  } as ApiError,
+  standardHeaders: true,
+  legacyHeaders: false,
+});

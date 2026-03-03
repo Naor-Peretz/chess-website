@@ -160,7 +160,7 @@ jobs:
             echo "" >> "$REVIEW_OUTPUT"
 
             # Build prompt file to avoid shell quoting issues
-            PROMPT_FILE="/tmp/plan-prompt-${MODEL}.txt"
+            PROMPT_FILE=$(mktemp "/tmp/plan-prompt-${MODEL}-XXXXXXXX.txt")
             {
               echo "You are a plan reviewer. Review the following implementation plan for a chess website project."
               echo "Evaluate: completeness, feasibility, risks, missing considerations, and suggested improvements."
@@ -290,6 +290,7 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: gemini-2.0-flash
           PLAN_FILES: ${{ needs.find-plans.outputs.plans }}
+          REVIEW_OUTPUT_PATH: /tmp/plan-review-gemini.md
         run: node .github/scripts/review-plan-gemini.mjs
 
       - name: Post review comment
