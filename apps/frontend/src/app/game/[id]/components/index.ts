@@ -5,4 +5,6 @@ export { EngineThinkingOverlay } from './EngineThinkingOverlay';
 export { GameInfo } from './GameInfo';
 export { GameOverModal } from './GameOverModal';
 export { KeyboardMoveInput } from './KeyboardMoveInput';
+export { PromotionDialog } from './PromotionDialog';
+export type { PendingPromotion } from './PromotionDialog';
 export { SoundControl } from './SoundControl';
