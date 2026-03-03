@@ -6,6 +6,7 @@ interface KeyboardMoveInputProps {
   isUserTurn: boolean;
   isGameOver: boolean;
   isMoving: boolean;
+  isPromoting: boolean;
   onMove: (from: Square, to: Square, promotion?: string) => void;
 }
 
@@ -22,6 +23,7 @@ export function KeyboardMoveInput({
   isUserTurn,
   isGameOver,
   isMoving,
+  isPromoting,
   onMove,
 }: KeyboardMoveInputProps) {
   const [value, setValue] = useState('');
@@ -76,7 +78,7 @@ export function KeyboardMoveInput({
     [value, chess, isUserTurn, isGameOver, isMoving, onMove]
   );
 
-  const disabled = !isUserTurn || isGameOver || isMoving;
+  const disabled = !isUserTurn || isGameOver || isMoving || isPromoting;
 
   return (
     <form onSubmit={handleSubmit} className="w-full">

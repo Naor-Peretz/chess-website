@@ -23,8 +23,10 @@ import {
   GameInfo,
   GameOverModal,
   KeyboardMoveInput,
+  PromotionDialog,
   SoundControl,
 } from './components';
+import type { PendingPromotion } from './components';
 
 export default function GamePage() {
   const params = useParams();
@@ -47,6 +49,7 @@ export default function GamePage() {
   const [invalidMove, setInvalidMove] = useState(false);
   const [selectedSquare, setSelectedSquare] = useState<Square | null>(null);
   const [possibleMoves, setPossibleMoves] = useState<Square[]>([]);
+  const [pendingPromotion, setPendingPromotion] = useState<PendingPromotion | null>(null);
 
   // Local display times for clock ticking (separate from server times)
   const [displayTimeUser, setDisplayTimeUser] = useState<number>(0);
@@ -142,8 +145,14 @@ export default function GamePage() {
 
   // Clock ticking effect
   useEffect(() => {
-    // Don't tick if no game, game over, no time control, or currently moving
-    if (!game || game.isGameOver || game.timeControlType === 'none' || isMoving) {
+    // Don't tick if no game, game over, no time control, currently moving, or promotion dialog open
+    if (
+      !game ||
+      game.isGameOver ||
+      game.timeControlType === 'none' ||
+      isMoving ||
+      !!pendingPromotion
+    ) {
       return;
     }
 
@@ -163,7 +172,7 @@ export default function GamePage() {
     }, 100); // Update every 100ms for smooth countdown
 
     return () => clearInterval(intervalId);
-  }, [game, isMoving]);
+  }, [game, isMoving, pendingPromotion]);
 
   // Track previous move count to announce new moves
   const prevMoveCountRef = useRef<number>(0);
@@ -247,7 +256,13 @@ export default function GamePage() {
   // Timeout detection - refetch game when time reaches 0 to get server confirmation
   const timeoutCheckRef = useRef<boolean>(false);
   useEffect(() => {
-    if (!game || game.isGameOver || game.timeControlType === 'none' || isMoving) {
+    if (
+      !game ||
+      game.isGameOver ||
+      game.timeControlType === 'none' ||
+      isMoving ||
+      !!pendingPromotion
+    ) {
       timeoutCheckRef.current = false;
       return;
     }
@@ -260,13 +275,13 @@ export default function GamePage() {
       // Refetch game to get server confirmation of timeout
       fetchGame();
     }
-  }, [game, displayTimeUser, displayTimeEngine, isMoving, fetchGame]);
+  }, [game, displayTimeUser, displayTimeEngine, isMoving, pendingPromotion, fetchGame]);
 
   // Visibility change handler - re-sync time when tab becomes visible
   // This handles reconnection scenarios where the user switches tabs or minimizes the browser
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && game && !game.isGameOver) {
+      if (document.visibilityState === 'visible' && game && !game.isGameOver && !pendingPromotion) {
         // Re-fetch game to get accurate server time
         fetchGame();
       }
@@ -274,7 +289,7 @@ export default function GamePage() {
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [game, fetchGame]);
+  }, [game, fetchGame, pendingPromotion]);
 
   // Keyboard navigation for replay mode
   useEffect(() => {
@@ -321,7 +336,7 @@ export default function GamePage() {
       sourceSquare: string;
       targetSquare: string | null;
     }): boolean => {
-      if (!game || !chess || isMoving || game.isGameOver) return false;
+      if (!game || !chess || isMoving || game.isGameOver || !!pendingPromotion) return false;
       if (game.currentTurn !== 'w') return false; // Not user's turn
       if (!targetSquare) return false; // Dropped off board
 
@@ -344,7 +359,7 @@ export default function GamePage() {
         const moveResult = testChess.move({
           from: sourceSquare as Square,
           to: targetSquare as Square,
-          promotion: isPromotion ? 'q' : undefined, // Default to queen promotion
+          promotion: isPromotion ? 'q' : undefined, // Use queen for legality check
         });
 
         if (!moveResult) {
@@ -353,7 +368,13 @@ export default function GamePage() {
         }
         newFen = testChess.fen();
 
-        // Play user move sound at optimistic update point
+        // Intercept promotion: show dialog instead of auto-promoting
+        if (isPromotion) {
+          setPendingPromotion({ from: sourceSquare, to: targetSquare });
+          return false; // Piece snaps back — no optimistic update until piece is chosen
+        }
+
+        // Play user move sound at optimistic update point (non-promotion moves only)
         try {
           playRef.current(determineSoundType(moveResult, testChess.inCheck()));
         } catch {
@@ -377,7 +398,6 @@ export default function GamePage() {
       const move: MakeMoveRequest = {
         from: sourceSquare as Square,
         to: targetSquare as Square,
-        promotion: isPromotion ? 'q' : undefined,
       };
 
       gameApi
@@ -410,13 +430,13 @@ export default function GamePage() {
 
       return true; // Return true immediately for optimistic update
     },
-    [game, chess, gameId, isMoving, playRef]
+    [game, chess, gameId, isMoving, pendingPromotion, playRef]
   );
 
   // Handle keyboard move input (algebraic notation)
   const onKeyboardMove = useCallback(
     (from: Square, to: Square, promotion?: string) => {
-      if (!game || !chess || isMoving || game.isGameOver) return;
+      if (!game || !chess || isMoving || game.isGameOver || !!pendingPromotion) return;
 
       // Validate and get new FEN
       let newFen: string;
@@ -478,7 +498,7 @@ export default function GamePage() {
           setIsMoving(false);
         });
     },
-    [game, chess, gameId, isMoving, playRef]
+    [game, chess, gameId, isMoving, pendingPromotion, playRef]
   );
 
   // Handle square click to show possible moves
@@ -486,8 +506,15 @@ export default function GamePage() {
     ({ square }: { piece: { pieceType: string } | null; square: string }) => {
       const clickedSquare = square as Square;
 
-      if (!game || !chess || game.isGameOver || game.currentTurn !== 'w') {
-        // Clear selection if game is over or not user's turn
+      if (
+        !game ||
+        !chess ||
+        game.isGameOver ||
+        game.currentTurn !== 'w' ||
+        isMoving ||
+        !!pendingPromotion
+      ) {
+        // Clear selection if game is over, not user's turn, moving, or promoting
         setSelectedSquare(null);
         setPossibleMoves([]);
         return;
@@ -531,8 +558,104 @@ export default function GamePage() {
         setPossibleMoves([]);
       }
     },
-    [game, chess, selectedSquare, possibleMoves, onDrop]
+    [game, chess, selectedSquare, possibleMoves, onDrop, isMoving, pendingPromotion]
   );
+
+  // Handle promotion piece selection from dialog
+  const handlePromotionSelect = useCallback(
+    (piece: 'q' | 'r' | 'b' | 'n') => {
+      if (!pendingPromotion) return;
+
+      // Capture from/to before clearing state
+      const { from, to } = pendingPromotion;
+
+      // Close dialog first, then block board (avoid simultaneous overlays)
+      setPendingPromotion(null);
+      setIsMoving(true);
+      setMoveError(null);
+
+      // Validate move with chosen promotion piece
+      let newFen: string;
+      try {
+        const testChess = new Chess(game!.currentFen);
+        const moveResult = testChess.move({
+          from: from as Square,
+          to: to as Square,
+          promotion: piece,
+        });
+
+        if (!moveResult) {
+          setIsMoving(false);
+          return;
+        }
+        newFen = testChess.fen();
+
+        // Play user move sound
+        try {
+          playRef.current(determineSoundType(moveResult, testChess.inCheck()));
+        } catch {
+          /* sound must never interfere with move flow */
+        }
+      } catch {
+        setIsMoving(false);
+        return;
+      }
+
+      // Capture FEN before engine move for engine sound detection
+      const userMoveFen = newFen;
+
+      // Safe: guards prevent game mutation while pendingPromotion is set
+      const previousGame = game;
+
+      // Optimistic update
+      setGame((prev) => (prev ? { ...prev, currentFen: newFen, currentTurn: 'b' } : prev));
+
+      // Make the move via API with chosen promotion piece
+      const move: MakeMoveRequest = {
+        from: from as Square,
+        to: to as Square,
+        promotion: piece,
+      };
+
+      gameApi
+        .makeMove(gameId, move)
+        .then((result) => {
+          setGame(result.game);
+
+          // Play engine move sound
+          if (result.engineMove?.san) {
+            try {
+              const tempChess = new Chess(userMoveFen);
+              const engineResult = tempChess.move(result.engineMove.san);
+              if (engineResult) {
+                playRef.current(determineSoundType(engineResult, tempChess.inCheck()));
+              }
+            } catch {
+              /* malformed SAN — skip engine sound silently */
+            }
+          }
+        })
+        .catch((err) => {
+          console.error('Failed to make promotion move:', err);
+          setMoveError('Failed to make move. Please try again.');
+          setGame(previousGame);
+        })
+        .finally(() => {
+          setIsMoving(false);
+        });
+    },
+    [pendingPromotion, game, gameId, playRef]
+  );
+
+  // Handle promotion cancel (Escape or backdrop click)
+  const handlePromotionCancel = useCallback(() => {
+    setPendingPromotion(null);
+    // Clear highlights — needed for drag-and-drop path which doesn't clear highlights
+    // before the promotion dialog opens. Redundant for click-to-move (already cleared in
+    // onSquareClick before onDrop delegation) but harmless.
+    setSelectedSquare(null);
+    setPossibleMoves([]);
+  }, []);
 
   // Clear selection when move is made (after drag or when turn changes)
   useEffect(() => {
@@ -753,32 +876,44 @@ export default function GamePage() {
             />
           )}
 
-          {/* Chess Board */}
+          {/* Chess Board — z-20 during promotion to stay above sticky header */}
           <div
             role="region"
             aria-label="Chess board"
             aria-describedby="board-description"
             className={`relative mx-auto overflow-hidden rounded-xl sm:rounded-2xl shadow-xl sm:shadow-2xl glow transition-all ${
               invalidMove ? 'animate-shake ring-4 ring-red-500/50' : ''
-            }`}
+            } ${pendingPromotion ? 'z-20' : ''}`}
             style={{ width: boardSize }}
           >
-            <Chessboard
-              options={{
-                position: displayFen,
-                allowDragging: !game.isGameOver && isUserTurn && !isMoving,
-                onPieceDrop: onDrop,
-                onSquareClick: onSquareClick,
-                squareStyles: isReplayMode ? {} : customSquareStyles,
-                boardStyle: {
-                  borderRadius: '0',
-                },
-                darkSquareStyle: { backgroundColor: '#769656' },
-                lightSquareStyle: { backgroundColor: '#eeeed2' },
-              }}
-            />
+            {/* Board with aria-hidden during promotion to keep SR focus in dialog */}
+            <div aria-hidden={!!pendingPromotion || undefined}>
+              <Chessboard
+                options={{
+                  position: displayFen,
+                  allowDragging: !game.isGameOver && isUserTurn && !isMoving && !pendingPromotion,
+                  onPieceDrop: onDrop,
+                  onSquareClick: onSquareClick,
+                  squareStyles: isReplayMode ? {} : customSquareStyles,
+                  boardStyle: {
+                    borderRadius: '0',
+                  },
+                  darkSquareStyle: { backgroundColor: '#769656' },
+                  lightSquareStyle: { backgroundColor: '#eeeed2' },
+                }}
+              />
+            </div>
             {/* Engine thinking overlay - shown when waiting for engine response */}
             {isMoving && <EngineThinkingOverlay />}
+            {/* Promotion dialog - shown when pawn reaches last rank */}
+            {pendingPromotion && !game?.isGameOver && (
+              <PromotionDialog
+                pending={pendingPromotion}
+                boardSize={boardSize}
+                onSelect={handlePromotionSelect}
+                onCancel={handlePromotionCancel}
+              />
+            )}
           </div>
           <BoardDescription fen={displayFen} isGameOver={game.isGameOver} isUserTurn={isUserTurn} />
 
@@ -799,6 +934,7 @@ export default function GamePage() {
               isUserTurn={isUserTurn}
               isGameOver={game.isGameOver}
               isMoving={isMoving}
+              isPromoting={!!pendingPromotion}
               onMove={onKeyboardMove}
             />
           )}
