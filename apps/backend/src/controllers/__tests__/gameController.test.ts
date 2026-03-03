@@ -61,7 +61,7 @@ import app from '../../app';
 describe('GameController API', () => {
   const mockUserId = 'user-123';
   const mockUserEmail = 'test@example.com';
-  const validToken = 'valid-test-token';
+  const validToken = process.env.TEST_AUTH_TOKEN || 'test-token';
 
   const mockGameResponse = {
     id: 'game-456',
@@ -83,8 +83,10 @@ describe('GameController API', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    // Default: auth succeeds
-    mockVerifyToken.mockResolvedValue({ userId: mockUserId, email: mockUserEmail });
+    // Default: auth succeeds only with a valid token (not empty string)
+    mockVerifyToken.mockImplementation((token: string) =>
+      Promise.resolve(token ? { userId: mockUserId, email: mockUserEmail } : null)
+    );
   });
 
   describe('POST /api/games', () => {

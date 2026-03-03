@@ -9,6 +9,7 @@ import cookieParser from 'cookie-parser';
 import * as Sentry from '@sentry/node';
 
 import { config } from './config/unifiedConfig';
+import { csrfProtection } from './middleware/csrfProtection';
 import { errorBoundary } from './middleware/errorBoundary';
 import { requestLogger } from './middleware/requestLogger';
 import routes from './routes';
@@ -49,6 +50,7 @@ app.use(
 app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 app.use(cookieParser());
+app.use(csrfProtection);
 app.use(compression());
 
 // Passport initialization (for OAuth)

@@ -3,7 +3,7 @@ import passport from '../config/passport';
 import { AuthController } from '../controllers/AuthController';
 import { services } from '../services/serviceContainer';
 import { authMiddleware, optionalAuthMiddleware } from '../middleware/authMiddleware';
-import { authLimiter } from '../middleware/rateLimiter';
+import { authLimiter, generalLimiter } from '../middleware/rateLimiter';
 import { config } from '../config/unifiedConfig';
 
 const router: Router = Router();
@@ -47,21 +47,27 @@ router.get(
  * Returns the currently authenticated user.
  * Requires valid JWT token.
  */
-router.get('/me', authMiddleware, (req, res) => controller.getCurrentUser(req, res));
+router.get('/me', generalLimiter, authMiddleware, (req, res) =>
+  controller.getCurrentUser(req, res)
+);
 
 /**
  * POST /api/auth/logout
  * Logs out the user by clearing the auth cookie.
  * Uses optional auth to capture user info for audit trail.
  */
-router.post('/logout', optionalAuthMiddleware, (req, res) => controller.logout(req, res));
+router.post('/logout', generalLimiter, optionalAuthMiddleware, (req, res) =>
+  controller.logout(req, res)
+);
 
 /**
  * POST /api/auth/logout-all
  * Logs out from all devices by invalidating all tokens.
  * Requires valid JWT token.
  */
-router.post('/logout-all', authMiddleware, (req, res) => controller.logoutAll(req, res));
+router.post('/logout-all', generalLimiter, authMiddleware, (req, res) =>
+  controller.logoutAll(req, res)
+);
 
 /**
  * POST /api/auth/exchange

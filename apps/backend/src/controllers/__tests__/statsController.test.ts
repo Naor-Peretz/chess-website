@@ -46,7 +46,7 @@ import app from '../../app';
 describe('StatsController API', () => {
   const mockUserId = 'user-123';
   const mockUserEmail = 'test@example.com';
-  const validToken = 'valid-test-token';
+  const validToken = process.env.TEST_AUTH_TOKEN || 'test-token';
 
   const mockStatsResponse = {
     totalGames: 10,
@@ -70,7 +70,9 @@ describe('StatsController API', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockVerifyToken.mockResolvedValue({ userId: mockUserId, email: mockUserEmail });
+    mockVerifyToken.mockImplementation((token: string) =>
+      Promise.resolve(token ? { userId: mockUserId, email: mockUserEmail } : null)
+    );
   });
 
   describe('GET /api/users/stats', () => {

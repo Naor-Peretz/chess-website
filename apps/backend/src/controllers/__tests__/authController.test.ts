@@ -53,7 +53,7 @@ describe('AuthController API', () => {
   const mockUserEmail = 'test@example.com';
   const mockGoogleId = 'google-123';
   const mockDisplayName = 'Test User';
-  const validToken = 'valid-test-token';
+  const validToken = process.env.TEST_AUTH_TOKEN || 'test-token';
   // BFF secret matching the dev default in unifiedConfig.ts
   const validBffSecret = 'dev-bff-secret-change-in-production';
 
@@ -69,12 +69,10 @@ describe('AuthController API', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    // Default: auth succeeds
-    mockVerifyToken.mockResolvedValue({
-      userId: mockUserId,
-      email: mockUserEmail,
-      tokenVersion: 1,
-    });
+    // Default: auth succeeds only with a valid token (not empty string)
+    mockVerifyToken.mockImplementation((token: string) =>
+      Promise.resolve(token ? { userId: mockUserId, email: mockUserEmail, tokenVersion: 1 } : null)
+    );
     mockGetUserById.mockResolvedValue(mockUser);
   });
 
