@@ -106,12 +106,12 @@ service/src/
 ### 1. Routes Only Route, Controllers Control
 
 ```typescript
-// ❌ NEVER: Business logic in routes
+// Avoid: Business logic in routes
 router.post('/submit', async (req, res) => {
   // 200 lines of logic
 });
 
-// ✅ ALWAYS: Delegate to controller
+// Prefer: Delegate to controller
 router.post('/submit', (req, res) => controller.submit(req, res));
 ```
 
@@ -141,13 +141,13 @@ try {
 }
 ```
 
-### 4. Use unifiedConfig, NEVER process.env
+### 4. Use unifiedConfig instead of process.env
 
 ```typescript
-// ❌ NEVER
+// Avoid
 const timeout = process.env.TIMEOUT_MS;
 
-// ✅ ALWAYS
+// Prefer
 import { config } from './config/unifiedConfig';
 const timeout = config.timeouts.default;
 ```
@@ -312,9 +312,3 @@ Caching (Redis), rate limiting, background jobs, retry with backoff, structured 
 - **database-verification** - Verify column names and schema consistency
 - **error-tracking** - Sentry integration patterns
 - **skill-developer** - Meta-skill for creating and managing skills
-
----
-
-**Skill Status**: COMPLETE ✅
-**Line Count**: < 500 ✅
-**Progressive Disclosure**: 11 resource files ✅

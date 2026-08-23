@@ -215,15 +215,15 @@ export const Route = createFileRoute('/my-route/')({
 
 ### ⏳ Loading & Error States
 
-**CRITICAL RULE: No Early Returns**
+**No early returns for loading states**
 
 ```typescript
-// ❌ NEVER - Causes layout shift
+// Avoid - Causes layout shift
 if (isLoading) {
     return <LoadingSpinner />;
 }
 
-// ✅ ALWAYS - Consistent layout
+// Prefer - Consistent layout
 <SuspenseLoader>
     <Content />
 </SuspenseLoader>
@@ -233,8 +233,7 @@ if (isLoading) {
 
 **Error Handling:**
 
-- Use `useMuiSnackbar` for user feedback
-- NEVER `react-toastify`
+- Use `useMuiSnackbar` for user feedback (the project's standard; not `react-toastify`)
 - TanStack Query `onError` callbacks
 
 **[📖 Complete Guide: resources/loading-and-error-states.md](resources/loading-and-error-states.md)**
@@ -409,7 +408,3 @@ For complete examples, see [resources/complete-examples.md](resources/complete-e
 
 - **error-tracking**: Error tracking with Sentry (applies to frontend too)
 - **backend-dev-guidelines**: Backend API patterns that frontend consumes
-
----
-
-**Skill Status**: Modular structure with progressive loading for optimal context management

@@ -7,7 +7,7 @@ description: Add Sentry v8 error tracking and performance monitoring to your pro
 
 ## Purpose
 
-This skill enforces comprehensive Sentry error tracking and performance monitoring across all your project services following Sentry v8 patterns.
+This skill enforces comprehensive Sentry error tracking and performance monitoring across all your project services following Sentry patterns.
 
 ## When to Use This Skill
 
@@ -18,23 +18,9 @@ This skill enforces comprehensive Sentry error tracking and performance monitori
 - Adding performance spans
 - Handling workflow errors
 
-## 🚨 CRITICAL RULE
+## Error capture
 
-**ALL ERRORS MUST BE CAPTURED TO SENTRY** - No exceptions. Never use console.error alone.
-
-## Current Status
-
-### Form Service ✅ Complete
-
-- Sentry v8 fully integrated
-- All workflow errors tracked
-- SystemActionQueueProcessor instrumented
-- Test endpoints available
-
-### Email Service 🟡 In Progress
-
-- Phase 1-2 complete (6/22 tasks)
-- 189 ErrorLogger.log() calls remaining
+Capture every error to Sentry, not just to the console, so that failures are visible and traceable in production instead of being lost in local logs.
 
 ## Sentry Integration Patterns
 
@@ -89,7 +75,7 @@ WorkflowSentryHelper.captureWorkflowError(error, {
 });
 ```
 
-### 4. Cron Jobs (MANDATORY Pattern)
+### 4. Cron Jobs
 
 ```typescript
 #!/usr/bin/env node
@@ -330,14 +316,14 @@ try {
 }
 ```
 
-## Common Mistakes to Avoid
+## Things to get right
 
-❌ **NEVER** use console.error without Sentry
-❌ **NEVER** swallow errors silently
-❌ **NEVER** expose sensitive data in error context
-❌ **NEVER** use generic error messages without context
-❌ **NEVER** skip error handling in async operations
-❌ **NEVER** forget to import instrument.ts as first line in cron jobs
+- Capture to Sentry alongside any `console.error`, so errors surface in production.
+- Handle every caught error instead of swallowing it silently.
+- Keep sensitive data out of error context.
+- Include operation context so errors are meaningful and actionable.
+- Cover async operations with error handling too.
+- Import `instrument.ts` as the first line in cron jobs.
 
 ## Implementation Checklist
 

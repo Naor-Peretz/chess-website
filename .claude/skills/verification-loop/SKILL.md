@@ -112,17 +112,7 @@ Issues to Fix:
 
 ## Continuous Mode
 
-For long sessions, run verification every 15 minutes or after major changes:
-
-```markdown
-Set a mental checkpoint:
-
-- After completing each function
-- After finishing a component
-- Before moving to next task
-
-Run: /verify
-```
+For long sessions, re-run verification at natural checkpoints — after completing a function or component, and before moving to the next task — rather than waiting for the end. Run: /verify
 
 ## Integration with Hooks
 
