@@ -67,3 +67,7 @@ playwright-report/
 
 # Agent security audit (separate project)
 agent-security-audit/
+
+# Ad-hoc screenshots and analysis scripts at repo root
+/*.png
+/analyze_*.py

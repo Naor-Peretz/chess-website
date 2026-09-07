@@ -2,7 +2,7 @@
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": ["sequential-thinking", "playwright", "memory", "context7"],
   "permissions": {
-    "allow": ["Edit:*", "Write:*", "MultiEdit:*", "NotebookEdit:*", "Bash:*"],
+    "allow": ["Edit", "Write", "MultiEdit", "NotebookEdit", "Bash"],
     "defaultMode": "acceptEdits"
   },
   "hooks": {
