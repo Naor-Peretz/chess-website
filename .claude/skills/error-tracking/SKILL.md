@@ -305,12 +305,9 @@ Sentry.setupExpressErrorHandler(app);
 
 // Manual instrumentation uses spans, not transactions.
 // (Sentry.Handlers.* and Sentry.startTransaction() were removed in v8+.)
-await Sentry.startSpan(
-  { op: 'operation.type', name: 'Operation Name' },
-  async () => {
-    // Your operation — the span ends automatically
-  }
-);
+await Sentry.startSpan({ op: 'operation.type', name: 'Operation Name' }, async () => {
+  // Your operation — the span ends automatically
+});
 ```
 
 ## Things to get right

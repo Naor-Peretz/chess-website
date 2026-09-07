@@ -13,16 +13,16 @@ Creating or editing components/pages, fetching data, styling, routing, accessibi
 
 ## Stack (what's actually here)
 
-| Concern | This project | NOT used |
-|---|---|---|
-| Framework | Next.js 16 **App Router** (`src/app/`) | Vite, React Router, TanStack Router |
-| Styling | **TailwindCSS v4** utility classes + `dark:` variants | MUI, styled-components, emotion |
-| Components | `export function Component(props: Props)` | `React.FC`, default-export convention |
-| Data fetching | `apiClient` service objects (`src/lib/*Api.ts`) via `useEffect`/`useState` today; **TanStack Query** (`src/lib/queryClient.ts`) is endorsed for new data code | `useSuspenseQuery`/Suspense-first |
-| Board | `react-chessboard` v5 (`options` prop), sized via `useBoardSize()` | — |
-| Auth state | `useAuth()` from `src/contexts/AuthContext.tsx` | — |
-| Feedback | inline error state + `useAriaLiveAnnouncer` (SR announcements) | react-toastify, MUI Snackbar — there is **no toast system** |
-| Path alias | `@/` → `src/`; shared types from `@chess-website/shared` | `~types`/`~components`/`~features` |
+| Concern       | This project                                                                                                                                                  | NOT used                                                    |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| Framework     | Next.js 16 **App Router** (`src/app/`)                                                                                                                        | Vite, React Router, TanStack Router                         |
+| Styling       | **TailwindCSS v4** utility classes + `dark:` variants                                                                                                         | MUI, styled-components, emotion                             |
+| Components    | `export function Component(props: Props)`                                                                                                                     | `React.FC`, default-export convention                       |
+| Data fetching | `apiClient` service objects (`src/lib/*Api.ts`) via `useEffect`/`useState` today; **TanStack Query** (`src/lib/queryClient.ts`) is endorsed for new data code | `useSuspenseQuery`/Suspense-first                           |
+| Board         | `react-chessboard` v5 (`options` prop), sized via `useBoardSize()`                                                                                            | —                                                           |
+| Auth state    | `useAuth()` from `src/contexts/AuthContext.tsx`                                                                                                               | —                                                           |
+| Feedback      | inline error state + `useAriaLiveAnnouncer` (SR announcements)                                                                                                | react-toastify, MUI Snackbar — there is **no toast system** |
+| Path alias    | `@/` → `src/`; shared types from `@chess-website/shared`                                                                                                      | `~types`/`~components`/`~features`                          |
 
 ## Creating a component
 
