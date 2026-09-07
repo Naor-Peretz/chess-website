@@ -2,6 +2,8 @@
 
 Patterns for optimizing React component performance, preventing unnecessary re-renders, and avoiding memory leaks.
 
+> Convention note: this project uses plain function components (`export function Component()`), not `React.FC`. Some examples below still show `React.FC` for brevity — prefer the function form. The `useMemo`/`useCallback`/`React.memo`/cleanup guidance applies as-is.
+
 ---
 
 ## Memoization Patterns
@@ -132,25 +134,24 @@ export const ExpensiveComponent = React.memo<ExpensiveComponentProps>(
 
 ## Debounced Search
 
-### Using use-debounce Hook
+### Debouncing (hand-rolled)
+
+No debounce library is installed — debounce with `useEffect` + `setTimeout` (or extract a small `useDebounce` hook into `src/hooks/`). Feed the debounced value into your `apiClient` call or `useQuery` key.
 
 ```typescript
-import { useState } from 'react';
-import { useDebounce } from 'use-debounce';
-import { useSuspenseQuery } from '@tanstack/react-query';
+import { useState, useEffect } from 'react';
 
-export const SearchComponent: React.FC = () => {
+export function SearchComponent() {
     const [searchTerm, setSearchTerm] = useState('');
+    const [debounced, setDebounced] = useState('');
 
     // Debounce for 300ms
-    const [debouncedSearchTerm] = useDebounce(searchTerm, 300);
+    useEffect(() => {
+        const id = setTimeout(() => setDebounced(searchTerm), 300);
+        return () => clearTimeout(id);
+    }, [searchTerm]);
 
-    // Query uses debounced value
-    const { data } = useSuspenseQuery({
-        queryKey: ['search', debouncedSearchTerm],
-        queryFn: () => api.search(debouncedSearchTerm),
-        enabled: debouncedSearchTerm.length > 0,
-    });
+    // Then use `debounced` in your data fetch (apiClient service or useQuery key).
 
     return (
         <input
@@ -410,6 +411,5 @@ const handleExportExcel = async () => {
 
 **See Also:**
 
-- [component-patterns.md](component-patterns.md) - Lazy loading
-- [data-fetching.md](data-fetching.md) - TanStack Query optimization
-- [complete-examples.md](complete-examples.md) - Performance patterns in context
+- `SKILL.md` — component structure, data fetching (apiClient / TanStack Query), and App Router conventions
+- Next.js code-splits routes automatically; use `next/dynamic` for genuinely heavy client-only widgets

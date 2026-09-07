@@ -35,7 +35,7 @@ export class MyController extends BaseController {
     try {
       // ... your code
     } catch (error) {
-      this.handleError(error, 'myMethod'); // Automatically sends to Sentry
+      this.handleError(error, res, 'myMethod'); // Captures to Sentry + sends wrapped ApiError response
     }
   }
 }
@@ -294,26 +294,23 @@ curl http://localhost:3003/notifications/api/sentry/test-performance
 3. **N+1 queries** are detected and reported
 4. **Cron jobs** must track execution time
 
-### Transaction Tracking
+### Performance Tracing (Sentry v10)
 
 ```typescript
 import * as Sentry from '@sentry/node';
 
-// Automatic transaction tracking for Express routes
-app.use(Sentry.Handlers.requestHandler());
-app.use(Sentry.Handlers.tracingHandler());
+// Express is auto-instrumented via expressIntegration() in instrument.ts.
+// Register the error handler once in app.ts, AFTER routes:
+Sentry.setupExpressErrorHandler(app);
 
-// Manual transaction for custom operations
-const transaction = Sentry.startTransaction({
-  op: 'operation.type',
-  name: 'Operation Name',
-});
-
-try {
-  // Your operation
-} finally {
-  transaction.finish();
-}
+// Manual instrumentation uses spans, not transactions.
+// (Sentry.Handlers.* and Sentry.startTransaction() were removed in v8+.)
+await Sentry.startSpan(
+  { op: 'operation.type', name: 'Operation Name' },
+  async () => {
+    // Your operation — the span ends automatically
+  }
+);
 ```
 
 ## Things to get right
