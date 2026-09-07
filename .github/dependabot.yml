@@ -1,0 +1,31 @@
+version: 2
+
+updates:
+  # Keeps workflow action majors current so they stop drifting years behind.
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+    commit-message:
+      prefix: 'chore(actions)'
+    labels: ['dependencies', 'github-actions']
+
+  # One grouped PR per workspace for routine updates, individual PRs for majors
+  # so breaking changes get reviewed on their own.
+  - package-ecosystem: 'npm'
+    directories:
+      - '/'
+      - '/apps/backend'
+      - '/apps/frontend'
+      - '/packages/shared'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: 'chore(deps)'
+    labels: ['dependencies']
+    groups:
+      minor-and-patch:
+        update-types: ['minor', 'patch']

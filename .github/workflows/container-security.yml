@@ -12,52 +12,42 @@ on:
     paths:
       - '**/Dockerfile*'
       - 'docker-compose*.yml'
+      - '.github/workflows/container-security.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
-  check-dockerfiles:
-    name: Check for Dockerfiles
-    runs-on: ubuntu-latest
-    outputs:
-      has_dockerfiles: ${{ steps.check.outputs.has_dockerfiles }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Check if Dockerfiles exist
-        id: check
-        run: |
-          if find . -name "Dockerfile*" | grep -q .; then
-            echo "has_dockerfiles=true" >> $GITHUB_OUTPUT
-          else
-            echo "has_dockerfiles=false" >> $GITHUB_OUTPUT
-            echo "No Dockerfiles found - skipping container scan"
-          fi
-
   scan:
-    name: Trivy Container Scan
-    needs: check-dockerfiles
-    if: needs.check-dockerfiles.outputs.has_dockerfiles == 'true'
+    name: Trivy Scan
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - name: Find and scan Dockerfiles
-        run: |
-          echo "Found Dockerfiles:"
-          find . -name "Dockerfile*" -type f
+      # Dockerfile misconfigurations are ours to fix, so these block.
+      - name: Scan Dockerfile configuration
+        uses: aquasecurity/trivy-action@0.36.0
+        with:
+          scan-type: 'config'
+          scan-ref: 'apps/backend'
+          format: 'table'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'
 
-      - name: Build and scan backend image
-        if: hashFiles('apps/backend/Dockerfile') != ''
-        uses: aquasecurity/trivy-action@master
+      # Dependency CVEs mostly come from upstream images and transitive packages.
+      # Block only on critical findings that actually have a fix available;
+      # Dependabot handles the rest.
+      - name: Scan backend dependencies
+        uses: aquasecurity/trivy-action@0.36.0
         with:
           scan-type: 'fs'
           scan-ref: 'apps/backend'
           format: 'table'
-          severity: 'CRITICAL,HIGH'
-
-      - name: Build and scan frontend image
-        if: hashFiles('apps/frontend/Dockerfile') != ''
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: 'fs'
-          scan-ref: 'apps/frontend'
-          format: 'table'
-          severity: 'CRITICAL,HIGH'
+          severity: 'CRITICAL'
+          ignore-unfixed: true
+          exit-code: '1'
