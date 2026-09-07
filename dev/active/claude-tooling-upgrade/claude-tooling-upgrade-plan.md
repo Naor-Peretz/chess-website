@@ -6,6 +6,29 @@
 **Target model family:** Claude 5 (local default `claude-fable-5-1`; CI `opus` alias)
 **Evidence:** `claude-tooling-upgrade-context.md` (file:line for every claim)
 
+## Status (updated 2026-09-07)
+
+All seven phases have shipped as PRs #168, #170, and #171. **The "Why" table and
+the phase descriptions below record the state at audit time, not now** — read
+`claude-tooling-upgrade-tasks.md` for what actually landed and what was
+deliberately left out.
+
+Three things below are known to be wrong in hindsight, kept for the record:
+
+- Phase 2's `PreCompact` hook cannot work; Claude Code ignores hook output on
+  that event. It was built, found inert, and removed.
+- Phase 5's `--max-turns 5` was far too low, and the job also needs
+  `id-token: write`, an explicit `github_token`, and a separate step to post the
+  comment. All discovered by running it.
+- Phase 6's "pass build output to e2e via upload-artifact" was dropped: a Next
+  `.next` tree needs `node_modules` beside it and carries absolute paths, so the
+  round-trip loses to a rebuild. Turbo remote caching is the real lever.
+
+**Open deploy question:** `engines.node` is now `>=22.0.0`. `.nvmrc` is 22 and
+Render reads it, but Render's and Vercel's Node versions can also be pinned in
+their dashboards, which this repo cannot see. Confirm both build on 22 before
+merging #170.
+
 ## Why
 
 The `.claude/` setup was imported from a Keycloak/MUI/microservices showcase repo in January 2026 and has been patched, not rebuilt. Commit 60cf70b removed "pressure language" but left the structural problems. Measured state on 2026-09-07:
