@@ -26,7 +26,7 @@ jobs:
   review:
     name: Review plans
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     permissions:
       contents: read
       pull-requests: write
@@ -77,9 +77,10 @@ jobs:
           # the repository (https://github.com/apps/claude) and fails 401.
           github_token: ${{ secrets.GITHUB_TOKEN }}
           # 5 turns was enough for the old prompt, which only read the plan
-          # text. This one reads CLAUDE.md and the code the plan names, which
-          # costs a tool call each; timeout-minutes is the real backstop.
-          claude_args: '--model opus --max-turns 30'
+          # text inline. This one reads CLAUDE.md and the source the plan names,
+          # which costs a turn each — a real review of a large plan measured 32
+          # turns and ~13 minutes. timeout-minutes is the backstop.
+          claude_args: '--model opus --max-turns 60'
           prompt: |
             Review the implementation plan(s) in these files, using the
             plan-reviewer agent definition at .claude/agents/plan-reviewer.md
