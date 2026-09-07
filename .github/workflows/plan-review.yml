@@ -9,9 +9,11 @@ name: Plan Review
 on:
   pull_request:
     paths:
-      - '**/*-plan.md'
+      # Plan documents only. A looser '**/plan-*.md' also matched
+      # .claude/agents/plan-reviewer.md and fired on every tooling change.
+      - 'dev/**/*-plan.md'
+      - 'dev/**/plan.md'
       - '**/*.plan.md'
-      - '**/plan-*.md'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -29,6 +31,9 @@ jobs:
       contents: read
       pull-requests: write
       issues: write
+      # claude-code-action mints its GitHub token over OIDC; without this it
+      # fails with "Could not fetch an OIDC token".
+      id-token: write
 
     steps:
       - uses: actions/checkout@v7
@@ -40,7 +45,7 @@ jobs:
         run: |
           changed=$(git diff --name-only \
             "${{ github.event.pull_request.base.sha }}" "${{ github.sha }}" \
-            | grep -E '(-plan\.md|\.plan\.md|plan-.*\.md)$' || true)
+            | grep -E '^dev/.*(-plan|/plan)\.md$|\.plan\.md$' || true)
 
           # A file can appear in the diff and be deleted by a later commit.
           existing=""
