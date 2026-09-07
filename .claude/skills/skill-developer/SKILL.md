@@ -70,11 +70,11 @@ regex against the tool name.
 
 **The contract, which is where the previous hook set went wrong:**
 
-| Exit code | Meaning                                                                                                        |
-| --------- | -------------------------------------------------------------------------------------------------------------- |
-| 0         | Success. Stdout is injected as context only on `UserPromptSubmit`, `SessionStart`, and `PreCompact`.           |
-| 2         | Blocking error. Stderr goes to Claude.                                                                         |
-| 1         | **Non-blocking** error. Shown to the user, ignored by the flow. A hook that exits 1 to "block" does not block. |
+| Exit code | Meaning                                                                                                                          |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| 0         | Success. Stdout is injected as context only on `UserPromptSubmit`, `UserPromptExpansion`, `SessionStart`, and `PostModelSwitch`. |
+| 2         | Blocking error. Stderr goes to Claude.                                                                                           |
+| 1         | **Non-blocking** error. Shown to the user, ignored by the flow. A hook that exits 1 to "block" does not block.                   |
 
 On tool events, plain stdout never reaches the model. To say something to Claude,
 print JSON:
@@ -96,8 +96,18 @@ jq -n --arg reason "$why" '{
 }'
 ```
 
+On `SessionStart` it is the reverse: plain stdout is the supported channel, and
+`hookSpecificOutput` is not. `PreCompact` accepts neither — its output is ignored
+entirely, so it can only block via exit 2. Check the event before assuming a
+mechanism works; that assumption is what left the previous hook set inert.
+
 Read `session_id`, `tool_name`, `tool_input`, and `tool_response` from the stdin
 JSON. They are not environment variables. `$CLAUDE_PROJECT_DIR` is.
+
+Hooks are spawned by Claude Code, not by the Bash tool's shell, so a variable
+prefixed onto a command (`FOO=1 git push`) never reaches the hook process. Read
+that kind of flag out of `.tool_input.command`, or set it in `env` in
+settings.json.
 
 Note the field is `tool_response`, not `tool_result`.
 

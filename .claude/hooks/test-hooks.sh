@@ -59,9 +59,15 @@ echo "Hook contract tests"
 echo
 
 # --- session-start -----------------------------------------------------------
-check "session-start emits additionalContext" session-start.sh \
-  '{"session_id":"'"$SESSION"'","hook_event_name":"SessionStart","source":"startup"}' \
-  '.hookSpecificOutput.hookEventName == "SessionStart" and (.hookSpecificOutput.additionalContext | length > 0)'
+# SessionStart takes plain stdout as context, so assert on the text, not JSON.
+ss_out=$(printf '%s' '{"session_id":"'"$SESSION"'","hook_event_name":"SessionStart","source":"startup"}' | "$HOOKS_DIR/session-start.sh" 2>/dev/null)
+if grep -q 'Repository state at session start' <<<"$ss_out" && grep -q 'Branch:' <<<"$ss_out"; then
+  printf '  ok    %-46s\n' "session-start emits plain-text context"
+  pass=$((pass + 1))
+else
+  printf '  FAIL  %-46s got: %.80s\n' "session-start emits plain-text context" "$ss_out"
+  fail=$((fail + 1))
+fi
 
 # --- post-tool-use-tracker ---------------------------------------------------
 check "tracker ignores markdown" post-tool-use-tracker.sh \
@@ -101,6 +107,10 @@ check "guard denies push after frontend edit" playwright-test-guard.sh \
   '{"session_id":"'"$SESSION"'","tool_name":"Bash","tool_input":{"command":"git push -u origin main"}}' \
   '.hookSpecificOutput.permissionDecision == "deny" and (.hookSpecificOutput.permissionDecisionReason | length > 0)'
 
+check "guard honours in-command bypass" playwright-test-guard.sh \
+  '{"session_id":"'"$SESSION"'","tool_name":"Bash","tool_input":{"command":"SKIP_PLAYWRIGHT_GUARD=1 git push"}}' \
+  EMPTY
+
 SKIP_PLAYWRIGHT_GUARD=1 \
   check "guard honours the bypass env var" playwright-test-guard.sh \
   '{"session_id":"'"$SESSION"'","tool_name":"Bash","tool_input":{"command":"git push"}}' \
@@ -136,15 +146,6 @@ check "plan review emits additionalContext" post-plan-review.sh \
 check "auto-format skips non-source files" auto-format.sh \
   '{"session_id":"'"$SESSION"'","tool_name":"Edit","tool_input":{"file_path":"/tmp/nope.lock"}}' \
   EMPTY
-
-# --- pre-compact -------------------------------------------------------------
-if [ -d "$CLAUDE_PROJECT_DIR/dev/active" ] && [ -n "$(ls -A "$CLAUDE_PROJECT_DIR/dev/active" 2>/dev/null)" ]; then
-  check "pre-compact emits additionalContext" pre-compact.sh \
-    '{"session_id":"'"$SESSION"'","hook_event_name":"PreCompact","trigger":"auto"}' \
-    '.hookSpecificOutput.hookEventName == "PreCompact"'
-else
-  printf '  skip  %-46s no dev/active items\n' "pre-compact emits additionalContext"
-fi
 
 # --- notify ------------------------------------------------------------------
 check "notify is silent without credentials" notify.sh \

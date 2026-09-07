@@ -399,20 +399,22 @@ See `.claude/agents/README.md` for the table. `planner`, `plan-reviewer`,
 `.claude/rules/*.md` carry area-specific guidance and load only when Claude
 opens a matching file: `backend.md`, `frontend.md`, `prisma.md`, `security.md`.
 
-### Hooks (8)
+### Hooks (7)
 
-| Event                        | Hook                         | What it does                                                                                                 |
-| ---------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `SessionStart`               | `session-start.sh`           | Injects branch, open PR, git status, `dev/active` items                                                      |
-| `PreToolUse` (Bash)          | `playwright-test-guard.sh`   | Denies `git push` when frontend files were edited but no browser tool ran. Bypass: `SKIP_PLAYWRIGHT_GUARD=1` |
-| `PostToolUse` (Edit\|Write)  | `post-tool-use-tracker.sh`   | Logs which area of the monorepo was touched                                                                  |
-| `PostToolUse` (Edit\|Write)  | `auto-format.sh`             | Runs Prettier on the edited file                                                                             |
-| `PostToolUse` (playwright)   | `playwright-test-tracker.sh` | Marks the session as browser-verified                                                                        |
-| `PostToolUse` (ExitPlanMode) | `post-plan-review.sh`        | Routes an approved plan through review and onto a branch                                                     |
-| `Notification`               | `notify.sh`                  | Telegram ping on permission and idle prompts                                                                 |
-| `PreCompact`                 | `pre-compact.sh`             | Prompts a dev-docs update before compaction                                                                  |
+| Event                        | Hook                         | What it does                                                                                                              |
+| ---------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `SessionStart`               | `session-start.sh`           | Injects branch, open PR, git status, `dev/active` items                                                                   |
+| `PreToolUse` (Bash)          | `playwright-test-guard.sh`   | Denies `git push` when frontend files were edited but no browser tool ran. Bypass: `SKIP_PLAYWRIGHT_GUARD=1 git push ...` |
+| `PostToolUse` (Edit\|Write)  | `post-tool-use-tracker.sh`   | Logs which area of the monorepo was touched                                                                               |
+| `PostToolUse` (Edit\|Write)  | `auto-format.sh`             | Runs Prettier on the edited file                                                                                          |
+| `PostToolUse` (playwright)   | `playwright-test-tracker.sh` | Marks the session as browser-verified                                                                                     |
+| `PostToolUse` (ExitPlanMode) | `post-plan-review.sh`        | Routes an approved plan through review and onto a branch                                                                  |
+| `Notification`               | `notify.sh`                  | Telegram ping on permission and idle prompts                                                                              |
 
 Run `.claude/hooks/test-hooks.sh` after changing any of them.
+
+There is no `PreCompact` hook: Claude Code ignores hook output on that event,
+so one could not inject anything. Run `/dev-docs-update` before compacting.
 
 ## CI/CD Pipeline
 

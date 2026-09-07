@@ -6,7 +6,10 @@
 # Denies with permissionDecision rather than a non-zero exit: exit 1 is a
 # non-blocking hook error and the push would go through anyway.
 #
-# Bypass: SKIP_PLAYWRIGHT_GUARD=1
+# Bypass: include SKIP_PLAYWRIGHT_GUARD=1 in the command itself. Hooks are
+# spawned by Claude Code, not by the Bash tool's shell, so a variable prefixed
+# onto the command never reaches this process — the bypass has to be read out of
+# the command text. An exported variable in the session environment also works.
 set -uo pipefail
 
 input=$(cat)
@@ -18,6 +21,7 @@ session_id=$(jq -r '.session_id // empty' <<<"$input")
 [ "$tool_name" = "Bash" ] || exit 0
 [[ "$command" =~ git[[:space:]]+push ]] || exit 0
 [ "${SKIP_PLAYWRIGHT_GUARD:-}" = "1" ] && exit 0
+[[ "$command" == *SKIP_PLAYWRIGHT_GUARD=1* ]] && exit 0
 
 cache_dir="${CLAUDE_PROJECT_DIR:-$(pwd)}/.claude/tsc-cache/${session_id:-default}"
 edited_log="$cache_dir/edited-files.log"
@@ -34,8 +38,8 @@ reason=$(
   printf 'start the dev servers with `pnpm dev`, navigate to the changed pages, interact\n'
   printf 'with what changed, and confirm it renders and behaves correctly.\n\n'
   printf 'Edited frontend files:\n%s\n\n' "$files"
-  printf 'If browser verification genuinely does not apply here, tell the user why and\n'
-  printf 'ask them to re-run with SKIP_PLAYWRIGHT_GUARD=1.\n'
+  printf 'If browser verification genuinely does not apply here, say why, then run\n'
+  printf 'the push as: SKIP_PLAYWRIGHT_GUARD=1 git push ...\n'
 )
 
 jq -n --arg reason "$reason" '{

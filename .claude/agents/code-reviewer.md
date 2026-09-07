@@ -57,13 +57,23 @@ You review; you do not fix. When you find problems, report them and stop — the
 
 ### Step 1: Gather Context
 
-Review the whole branch against its merge base, not the last commit — `HEAD~1`
-hides everything but the most recent commit on a multi-commit branch.
+Review the whole branch against its own merge base, not the last commit —
+`HEAD~1` hides everything but the most recent commit on a multi-commit branch.
+
+This repo stacks PRs onto other feature branches, so the base is often not
+`main`. Ask GitHub what it is, and fall back to the upstream tracking branch:
 
 ```bash
-git diff --name-only main...HEAD
-git diff main...HEAD
+BASE=$(gh pr view --json baseRefName --jq .baseRefName 2>/dev/null)
+BASE=${BASE:-$(git rev-parse --abbrev-ref '@{u}' 2>/dev/null | sed 's|^origin/||')}
+BASE=${BASE:-main}
+
+git diff --name-only "origin/$BASE...HEAD"
+git diff "origin/$BASE...HEAD"
 ```
+
+Diffing against `main` on a stacked branch reviews the whole stack instead of
+this PR's own changes.
 
 Read `CLAUDE.md` for project standards, and `dev/active/<task>/` if the work has
 a feature directory.
