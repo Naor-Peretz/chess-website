@@ -177,11 +177,13 @@ jobs:
     steps:
       # Render redeploys asynchronously after a merge, so poll rather than
       # curling once and testing whatever the previous deploy left running.
+      # The free tier cold-starts: a first request measured 56s, hence the
+      # generous per-attempt timeout.
       - name: Wait for backend health
         run: |
-          URL="https://chess-website-cm4y.onrender.com/health"
+          URL="https://chess-website-cm4y.onrender.com/api/health"
           for attempt in $(seq 1 30); do
-            code=$(curl -sS -o /tmp/health.json -w '%{http_code}' --max-time 30 "$URL" || echo "000")
+            code=$(curl -sS -o /tmp/health.json -w '%{http_code}' --max-time 90 "$URL" || echo "000")
             if [ "$code" = "200" ]; then
               echo "Healthy after ${attempt} attempt(s):"
               cat /tmp/health.json
