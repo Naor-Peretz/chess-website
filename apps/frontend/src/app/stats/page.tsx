@@ -84,33 +84,35 @@ function ResultsBar({ wins, losses, draws }: { wins: number; losses: number; dra
         )}
       </div>
       {/* Accessible data table alternative */}
-      <table className="sr-only">
-        <caption>Game Results Breakdown</caption>
-        <thead>
-          <tr>
-            <th scope="col">Result</th>
-            <th scope="col">Count</th>
-            <th scope="col">Percentage</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>Wins</td>
-            <td>{wins}</td>
-            <td>{winPct.toFixed(1)}%</td>
-          </tr>
-          <tr>
-            <td>Draws</td>
-            <td>{draws}</td>
-            <td>{drawPct.toFixed(1)}%</td>
-          </tr>
-          <tr>
-            <td>Losses</td>
-            <td>{losses}</td>
-            <td>{lossPct.toFixed(1)}%</td>
-          </tr>
-        </tbody>
-      </table>
+      <div className="sr-only">
+        <table>
+          <caption>Game Results Breakdown</caption>
+          <thead>
+            <tr>
+              <th scope="col">Result</th>
+              <th scope="col">Count</th>
+              <th scope="col">Percentage</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Wins</td>
+              <td>{wins}</td>
+              <td>{winPct.toFixed(1)}%</td>
+            </tr>
+            <tr>
+              <td>Draws</td>
+              <td>{draws}</td>
+              <td>{drawPct.toFixed(1)}%</td>
+            </tr>
+            <tr>
+              <td>Losses</td>
+              <td>{losses}</td>
+              <td>{lossPct.toFixed(1)}%</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -133,12 +135,15 @@ function DifficultyChart({ data }: { data: UserStatsResponse['byDifficulty'] }) 
                   {DIFFICULTY_LABELS[d.level] || `Level ${d.level}`}
                 </span>
                 <span className="text-zinc-500 dark:text-zinc-400">
-                  {d.wins}W / {d.losses}L / {d.draws}D
+                  {d.wins}W / {d.losses}L / {d.draws}D &middot; {winPct.toFixed(0)}% win
                 </span>
               </div>
+              {/* The bar length is games played, not wins, so it stays neutral.
+                  In emerald it read as a win bar, and a 0-win row still showed
+                  a filled green track. */}
               <div className="h-2 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
                 <div
-                  className="h-full rounded-full bg-emerald-500 transition-all"
+                  className="h-full rounded-full bg-zinc-400 transition-all dark:bg-zinc-500"
                   style={{ width: `${barWidth}%` }}
                   role="img"
                   aria-label={`${DIFFICULTY_LABELS[d.level]}: ${d.total} games, ${winPct.toFixed(0)}% win rate`}
@@ -149,29 +154,31 @@ function DifficultyChart({ data }: { data: UserStatsResponse['byDifficulty'] }) 
         })}
       </div>
       {/* Accessible data table */}
-      <table className="sr-only">
-        <caption>Performance by Difficulty Level</caption>
-        <thead>
-          <tr>
-            <th scope="col">Difficulty</th>
-            <th scope="col">Total</th>
-            <th scope="col">Wins</th>
-            <th scope="col">Losses</th>
-            <th scope="col">Draws</th>
-          </tr>
-        </thead>
-        <tbody>
-          {data.map((d) => (
-            <tr key={d.level}>
-              <td>{DIFFICULTY_LABELS[d.level]}</td>
-              <td>{d.total}</td>
-              <td>{d.wins}</td>
-              <td>{d.losses}</td>
-              <td>{d.draws}</td>
+      <div className="sr-only">
+        <table>
+          <caption>Performance by Difficulty Level</caption>
+          <thead>
+            <tr>
+              <th scope="col">Difficulty</th>
+              <th scope="col">Total</th>
+              <th scope="col">Wins</th>
+              <th scope="col">Losses</th>
+              <th scope="col">Draws</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {data.map((d) => (
+              <tr key={d.level}>
+                <td>{DIFFICULTY_LABELS[d.level]}</td>
+                <td>{d.total}</td>
+                <td>{d.wins}</td>
+                <td>{d.losses}</td>
+                <td>{d.draws}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -209,25 +216,27 @@ function TimeControlChart({ data }: { data: UserStatsResponse['byTimeControl'] }
         })}
       </div>
       {/* Accessible data table */}
-      <table className="sr-only">
-        <caption>Games by Time Control</caption>
-        <thead>
-          <tr>
-            <th scope="col">Time Control</th>
-            <th scope="col">Total</th>
-            <th scope="col">Wins</th>
-          </tr>
-        </thead>
-        <tbody>
-          {data.map((d) => (
-            <tr key={d.type}>
-              <td>{TIME_CONTROL_LABELS[d.type]}</td>
-              <td>{d.total}</td>
-              <td>{d.wins}</td>
+      <div className="sr-only">
+        <table>
+          <caption>Games by Time Control</caption>
+          <thead>
+            <tr>
+              <th scope="col">Time Control</th>
+              <th scope="col">Total</th>
+              <th scope="col">Wins</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {data.map((d) => (
+              <tr key={d.type}>
+                <td>{TIME_CONTROL_LABELS[d.type]}</td>
+                <td>{d.total}</td>
+                <td>{d.wins}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
