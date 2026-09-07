@@ -3,8 +3,9 @@ name: CI
 on:
   push:
     branches: [main, master]
+  # No base-branch filter: stacked PRs target another feature branch rather
+  # than main, and would otherwise merge with no CI having run at all.
   pull_request:
-    branches: [main, master]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
