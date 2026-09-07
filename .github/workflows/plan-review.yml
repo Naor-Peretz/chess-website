@@ -68,6 +68,7 @@ jobs:
           fi
 
       - name: Review with Claude
+        id: review
         if: steps.plans.outputs.found == 'true'
         uses: anthropics/claude-code-action@v1
         with:
@@ -97,13 +98,43 @@ jobs:
             Report blocking issues first, then gaps, then smaller notes. Cite
             file:line. Only raise genuine problems; if the plan is sound, say so.
 
-            Post your review as a PR comment whose first line is exactly:
+            Return the review as your final message. Do not try to post it
+            yourself — the next workflow step does that.
 
-            ## Claude Plan Review
-
-            End the comment with exactly one line, nothing after it:
+            End your final message with exactly one line, nothing after it:
 
             VERDICT: APPROVED
 
             or `VERDICT: NEEDS REVISION`, or `VERDICT: MAJOR CHANGES NEEDED`.
             Tooling greps for that line, so it must appear verbatim and once.
+
+      # Posting from the workflow rather than asking Claude to do it: in prompt
+      # mode the action gives it no comment tool, so the review ran fine and
+      # silently went nowhere.
+      - name: Post the review
+        if: steps.plans.outputs.found == 'true' && steps.review.outputs.execution_file != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EXECUTION_FILE: ${{ steps.review.outputs.execution_file }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          body=$(jq -r '
+            [.. | objects | select(.type? == "result") | .result // empty] | last // ""
+          ' "$EXECUTION_FILE")
+
+          if [ -z "$body" ]; then
+            echo "No result text in $EXECUTION_FILE — nothing to post"
+            exit 0
+          fi
+
+          {
+            echo '## Claude Plan Review'
+            echo
+            printf '%s\n' "$body"
+          } > /tmp/review.md
+
+          gh pr comment "$PR_NUMBER" --body-file /tmp/review.md
+          echo "Posted review ($(wc -c < /tmp/review.md) bytes)"
+
+          grep -E '^VERDICT: (APPROVED|NEEDS REVISION|MAJOR CHANGES NEEDED)$' /tmp/review.md \
+            || echo "::warning::Review has no parseable VERDICT line"
