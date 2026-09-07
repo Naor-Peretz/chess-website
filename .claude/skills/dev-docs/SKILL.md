@@ -1,5 +1,7 @@
 ---
-description: Create a comprehensive strategic plan with structured task breakdown
+name: dev-docs
+description: |
+  Create a plan and the dev/active/<feature>/ documentation set for it — plan, context, and task checklist. Use when starting work substantial enough to survive a context reset.
 argument-hint: Describe what you need planned (e.g., "refactor authentication system", "implement microservices")
 ---
 
@@ -46,9 +48,8 @@ Then:
 
 ## Context References
 
-- Check `PROJECT_KNOWLEDGE.md` for architecture overview (if exists)
-- Consult `BEST_PRACTICES.md` for coding standards (if exists)
-- Reference `TROUBLESHOOTING.md` for common issues to avoid (if exists)
-- Use `dev/README.md` for task management guidelines (if exists)
+- Read `CLAUDE.md` for the project's architecture, patterns, and git rules
+- Read `dev/active/*/‑context.md` for any related work already in flight
+- Read the code the plan will touch, and cite real paths in the plan
 
 **Note**: This command is ideal to use AFTER exiting plan mode when you have a clear vision of what needs to be done. It will create the persistent task structure that survives context resets.

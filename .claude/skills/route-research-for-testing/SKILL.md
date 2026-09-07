@@ -1,5 +1,7 @@
 ---
-description: Map edited routes & launch tests
+name: route-research-for-testing
+description: |
+  Find the backend routes changed this session and work out what to test for each. Use after editing route, controller, or service files and before writing or running API tests.
 argument-hint: '[/extra/path …]'
 allowed-tools: Bash(cat:*), Bash(awk:*), Bash(grep:*), Bash(sort:*), Bash(xargs:*), Bash(sed:*)
 model: sonnet

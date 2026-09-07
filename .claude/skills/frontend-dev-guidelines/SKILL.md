@@ -1,6 +1,7 @@
 ---
 name: frontend-dev-guidelines
-description: Frontend development guidelines for the chess-website Next.js App Router + TailwindCSS frontend. Use when creating components, pages, features, fetching data, styling, routing, or working with frontend code. Covers component structure, data fetching via apiClient/TanStack Query, App Router conventions, Tailwind styling, accessibility, TypeScript, and performance.
+description: |
+  Frontend development guidelines for the chess-website Next.js App Router + TailwindCSS frontend. Use when creating components, pages, features, fetching data, styling, routing, or working with frontend code. Covers component structure, data fetching via apiClient/TanStack Query, App Router conventions, Tailwind styling, accessibility, TypeScript, and performance.
 ---
 
 # Frontend Development Guidelines

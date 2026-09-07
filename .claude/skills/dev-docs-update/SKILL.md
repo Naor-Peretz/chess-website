@@ -1,5 +1,7 @@
 ---
-description: Update dev documentation before context compaction
+name: dev-docs-update
+description: |
+  Refresh the dev/active/<feature>/ docs with the current state before context is compacted or a session ends, so the next session can resume from them.
 argument-hint: Optional - specific context or tasks to focus on (leave empty for comprehensive update)
 ---
 

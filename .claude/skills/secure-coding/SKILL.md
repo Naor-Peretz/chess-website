@@ -1,6 +1,7 @@
 ---
 name: secure-coding
-description: Secure coding standards for all code. Triggers on JWT, authentication, crypto, tokens, passwords, secrets, sessions, cookies, authorization, permissions, encryption, hashing, signing, OAuth, API keys.
+description: |
+  Security patterns for the code in this repo: JWT handling and token revocation, the BFF OAuth exchange, CSRF double-submit cookies, ownership checks on game resources, input validation, and secret handling. Use when touching auth, cookies, tokens, the proxy route, or anything that reads user input.
 ---
 
 # Secure Coding Standards
@@ -79,23 +80,6 @@ crypto.createHmac('sha256', key); // Explicit algorithm
 
 // Encryption
 crypto.createCipheriv('aes-256-gcm', key, iv); // Explicit cipher
-```
-
-### 5. Password Hashing
-
-Use bcrypt or argon2 with explicit cost factors:
-
-```typescript
-// bcrypt - explicit rounds
-bcrypt.hash(password, 12); // 12 rounds minimum
-
-// argon2 - explicit parameters
-argon2.hash(password, {
-  type: argon2.argon2id,
-  memoryCost: 65536,
-  timeCost: 3,
-  parallelism: 4,
-});
 ```
 
 ### 6. OAuth/OIDC
@@ -429,34 +413,6 @@ catch (error) {
 - Use generic error messages for users
 - Don't reveal if email/username exists (auth flows)
 
-### 14. File Upload Validation
-
-```typescript
-function validateUpload(file: File): void {
-  // 1. Size limit
-  const maxSize = 5 * 1024 * 1024; // 5MB
-  if (file.size > maxSize) {
-    throw new Error('File too large');
-  }
-
-  // 2. MIME type whitelist
-  const allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
-  if (!allowedTypes.includes(file.type)) {
-    throw new Error('Invalid file type');
-  }
-
-  // 3. Extension whitelist (don't trust MIME alone)
-  const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif'];
-  const ext = file.name.toLowerCase().match(/\.[^.]+$/)?.[0];
-  if (!ext || !allowedExtensions.includes(ext)) {
-    throw new Error('Invalid file extension');
-  }
-
-  // 4. For images, verify magic bytes (optional but recommended)
-  // First bytes should match expected format
-}
-```
-
 ## OWASP Top 10 Quick Reference
 
 | #   | Vulnerability             | Our Protection                            |
@@ -471,39 +427,6 @@ function validateUpload(file: File): void {
 | 8   | Data Integrity Failures   | CSRF tokens, input validation             |
 | 9   | Logging Failures          | Sentry, no secrets in logs                |
 | 10  | SSRF                      | URL validation, allowlists                |
-
-## Security Testing Examples
-
-```typescript
-// Test: Authentication required
-test('rejects unauthenticated requests', async () => {
-  const res = await request(app).get('/api/games');
-  expect(res.status).toBe(401);
-});
-
-// Test: Authorization (ownership)
-test('user cannot access other user games', async () => {
-  const res = await request(app).get('/api/games/other-user-game-id').set('Cookie', userACookie);
-  expect(res.status).toBe(404); // Not 403, don't reveal existence
-});
-
-// Test: Input validation
-test('rejects invalid input', async () => {
-  const res = await request(app)
-    .post('/api/games')
-    .set('Cookie', authCookie)
-    .send({ difficultyLevel: 999 }); // Invalid
-  expect(res.status).toBe(400);
-});
-
-// Test: SQL injection attempt
-test('handles SQL injection attempt safely', async () => {
-  const res = await request(app)
-    .get("/api/games/'; DROP TABLE games; --")
-    .set('Cookie', authCookie);
-  expect(res.status).toBe(400); // Invalid UUID format
-});
-```
 
 ## Pre-Commit Security Checklist
 
@@ -531,41 +454,9 @@ test('handles SQL injection attempt safely', async () => {
 
 - [ ] CSRF tokens on state-changing operations
 - [ ] Rate limiting on sensitive endpoints
-- [ ] File uploads validated (size, type, extension)
 
 ### Code Quality
 
 - [ ] Constant-time comparison for secrets
 - [ ] Explicit crypto algorithms
 - [ ] Errors logged to Sentry, not exposed to users
-
-## Resource Files
-
-### [cloud-infrastructure-security.md](resources/cloud-infrastructure-security.md)
-
-Cloud & infrastructure security: IAM, CI/CD pipelines, logging, secrets in cloud, Vercel/AWS/Railway deployment security.
-
----
-
-## Why This Matters
-
-1. **Library updates** can change defaults silently
-2. **Refactoring** without full context can break security
-3. **Code reviews** miss implicit security assumptions
-4. **Audits** flag implicit security as findings
-5. **Future you** won't remember why it worked
-
-## Examples of "Safe by Coincidence"
-
-| Code                         | Why It's Dangerous                                |
-| ---------------------------- | ------------------------------------------------- |
-| `jwt.verify(token, secret)`  | Algorithm from token header - attacker controlled |
-| `res.cookie('token', value)` | Missing httpOnly, secure, sameSite                |
-| `crypto.createHash()`        | No algorithm - varies by Node version             |
-| `bcrypt.hash(pw, 10)`        | 10 rounds may be too low for modern hardware      |
-
-## Remember
-
-> "Explicit is better than implicit" - The Zen of Python
->
-> This applies doubly to security code.
