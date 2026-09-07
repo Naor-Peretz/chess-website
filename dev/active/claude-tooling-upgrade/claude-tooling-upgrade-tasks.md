@@ -4,7 +4,7 @@ Check off as you go. One PR per phase. See the plan for rationale and the contex
 
 ## Phase 0: Land the in-flight work
 
-- [ ] Update `frontend-dev-guidelines` entry in `.claude/skills/skill-rules.json` (drop MUI patterns, `enforcement: block`)
+- [~] ~~Update `frontend-dev-guidelines` entry in `skill-rules.json`~~ — skipped deliberately: Phase 2 deletes the file
 - [x] Move `analyze_logs.py`, `analyze_skill_usage.py` out of the repo
 - [x] Delete or move the 23 root `*.png` screenshots; add `/*.png` to `.gitignore`
 - [x] Commit WIP on `chore/opus5-prompt-audit`, push, open PR
@@ -25,7 +25,7 @@ Check off as you go. One PR per phase. See the plan for rationale and the contex
 
 ## Phase 2: Hooks rebuild
 
-- [ ] Delete 14 hook scripts: tmux-guard, long-running-reminder, suggest-compact, suggest-code-review, async-build, pr-logger, console-log-warn, check-console-log.cjs, markdown-blocker, error-handling-reminder.{sh,ts}, stop-build-check-enhanced, trigger-build-resolver, tsc-check, skill-activation-prompt.{sh,ts}
+- [x] Delete 14 hook scripts: tmux-guard, long-running-reminder, suggest-compact, suggest-code-review, async-build, pr-logger, console-log-warn, check-console-log.cjs, markdown-blocker, error-handling-reminder.{sh,ts}, stop-build-check-enhanced, trigger-build-resolver, tsc-check, skill-activation-prompt.{sh,ts}
 - [x] Delete `hooks/node_modules`, `hooks/package.json`, `hooks/package-lock.json`, `hooks/tsconfig.json`, `hooks/README.md`, `hooks/CONFIG.md`, `hooks/state/`, `hooks/scripts/`
 - [x] Delete root `CLAUDE_INTEGRATION_GUIDE.md` and `.claude/skills/skill-rules.json`
 - [x] Fix `post-tool-use-tracker.sh`: add `apps/*` case; read `session_id` from stdin
@@ -38,7 +38,7 @@ Check off as you go. One PR per phase. See the plan for rationale and the contex
 - [x] Rewrite `settings.json` hooks block (7 hooks); delete `enabledMcpjsonServers`; add `permissions.deny` for `git push --force`, `gh pr merge`, destructive `rm -rf`
 - [x] Run `/fewer-permission-prompts`; replace `settings.local.json`
 - [x] Add `hooks/test-hooks.sh` that pipes sample stdin into each hook and asserts output; all under 100 ms
-- [ ] One `claude --debug` session confirming hook output reaches the model
+- [x] Confirmed hook output reaches the model: a fresh `claude -p` session answered with the branch name, which is only available from `session-start.sh` output
 
 ## Phase 3: Agents consolidation
 
@@ -63,7 +63,7 @@ Check off as you go. One PR per phase. See the plan for rationale and the contex
 - [x] Merge `tdd-workflow` into `tdd-guide` agent; delete
 - [x] Merge `check-plan-review` + `end-plan` into `plan-review` skill with `argument-hint`
 - [x] Move `commands/*.md` to `skills/<name>/SKILL.md`; fix `dev-docs` phantom file refs; delete `commands/`
-- [ ] Rewrite `route-research-for-testing` to dispatch to `e2e-runner` or delete
+- [x] Rewrite `route-research-for-testing` — it dispatched to the deleted `auth-route-tester`; now traces routes through the layers itself (caught by the CI plan review)
 - [x] Slim `backend-dev-guidelines` resources to ~2,000 lines (purge Keycloak, blog-api, workflow chapter)
 - [x] Slim `secure-coding` under 400 lines; delete AWS/Terraform resource
 - [x] Slim `skill-developer` to match the real hook system
@@ -71,7 +71,7 @@ Check off as you go. One PR per phase. See the plan for rationale and the contex
 - [x] Add `.claude/rules/backend.md`, `frontend.md`, `prisma.md`, `security.md` with `paths:` frontmatter
 - [x] Trim CLAUDE.md sections that moved into rules
 - [x] Rewrite or delete `skills/README.md`
-- [ ] Run `/skill-doctor`; record baseline; re-run after one week
+- [ ] Run `/skill-doctor` after one week of use — deferred by design; the point is comparing invocation counts once the description-only triggering has had time to show
 
 ## Phase 5: Plan-review pipeline
 
@@ -81,14 +81,15 @@ Check off as you go. One PR per phase. See the plan for rationale and the contex
 - [x] Fix `check-plan-review.sh`: `--jq '... | last'`, grep `VERDICT:`, drop Gemini filter
 - [x] Delete `watch-plan-review.sh`; document `/loop 2m /plan-review check`
 - [x] Remove plan-watcher block from `.husky/pre-push`
-- [ ] Throwaway `plan/*` PR proves end to end
+- [x] Proven end to end on PR #171: workflow ran, posted `## Claude Plan Review` with a `VERDICT:` line, and `check-plan-review.sh` parsed it. Two review cycles, both parsed
 
 ## Phase 6: CI structure and dev loop
 
 - [x] Split `ci` into `quality`, `build-test`, `security` jobs; e2e consumes build artifact
 - [x] Pick one Node major (22 recommended); update `.nvmrc`, Dockerfile, `engines`, workflows
 - [x] `check-dependencies.js`: warn on outdated, fail on deprecated; cap network calls
-- [ ] Rename e2e job; add a game-flow spec that starts the backend
+- [x] e2e job renamed to `E2E & Accessibility`
+- [ ] Game-flow spec that starts the backend — deliberately out of scope, see below
 - [x] Post-merge smoke step: curl Render `/health`
 - [x] Add `.github/PULL_REQUEST_TEMPLATE.md`
 - [x] Drop local CodeQL from `pre-push`
@@ -97,7 +98,7 @@ Check off as you go. One PR per phase. See the plan for rationale and the contex
 
 - [x] CLAUDE.md: active work items, test count, agents list, skills list, new Hooks section, Sentry version references
 - [x] `MEMORY.md`: correct plan-review timeout and max-turns values
-- [ ] Move this feature dir to `dev/completed/`
+- [ ] Move this feature dir to `dev/completed/` — after #168, #170, #171 merge
 
 ## Status
 
