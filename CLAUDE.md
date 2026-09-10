@@ -365,43 +365,80 @@ gh api graphql -f query='
 6. **Save/Load:** Persist game state to database (F-20 to F-24)
 7. **Game End:** Detect checkmate, stalemate, draw conditions, timeout (F-25, F-26)
 
-## Available Skills
+## Claude Code Setup
 
-**Core development:**
+Everything lives under `.claude/`. `.claude/skills/skill-developer/SKILL.md`
+documents how each piece is wired.
 
-- **backend-dev-guidelines** - Node.js/Express/TypeScript patterns (auto-activates for backend files)
-- **frontend-dev-guidelines** - React/TypeScript patterns (auto-activates for frontend files)
-- **secure-coding** - Security patterns for auth, JWT, tokens, passwords (auto-activates)
-- **error-tracking** - Sentry integration patterns
-- **route-tester** - Testing authenticated API routes
+### Skills (9)
 
-**Plan review (CI):**
+Claude loads these from their `description` when the work matches; you can also
+invoke one directly.
 
-- **check-plan-review** - Check for plan review feedback from CI on current PR
-- **end-plan** - End planning phase, stop watcher, show final status
+| Skill                          | Covers                                                   |
+| ------------------------------ | -------------------------------------------------------- |
+| `backend-dev-guidelines`       | Express/Prisma layering, BaseController, Zod, Sentry     |
+| `frontend-dev-guidelines`      | App Router, apiClient, Tailwind, accessibility           |
+| `secure-coding`                | JWT, BFF exchange, CSRF, ownership checks, secrets       |
+| `postgres-patterns`            | Index design, query shapes, pooler behaviour, migrations |
+| `plan-review`                  | Read the CI plan verdict; close out planning             |
+| `dev-docs` / `dev-docs-update` | Create and refresh `dev/active/<feature>/` docs          |
+| `route-research-for-testing`   | Map routes changed this session to tests                 |
+| `skill-developer`              | How skills, agents, hooks, and rules work here           |
 
-**Utilities:**
+`ux-advisor` is a global skill, toggled with `/ux-advisor-on` and
+`/ux-advisor-off`. For design questions prefer `dev/design-guidelines.md`.
 
-- **ux-advisor** - Web design guidance (toggle: `/ux-advisor-on`, `/ux-advisor-off`)
-- **skill-developer** - Creating Claude Code skills and hooks
-- **strategic-compact** - Suggests manual context compaction at logical intervals
+### Agents (11)
 
-## Available Agents
+See `.claude/agents/README.md` for the table. `planner`, `plan-reviewer`,
+`code-reviewer`, and `database-reviewer` report and stop without editing files.
 
-See `.claude/agents/README.md` for full list and usage. Key agents: `planner`, `code-reviewer`, `dead-code-cleaner`, `documentation-architect`.
+### Rules
+
+`.claude/rules/*.md` carry area-specific guidance and load only when Claude
+opens a matching file: `backend.md`, `frontend.md`, `prisma.md`, `security.md`.
+
+### Hooks (7)
+
+| Event                        | Hook                         | What it does                                                                                                              |
+| ---------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `SessionStart`               | `session-start.sh`           | Injects branch, open PR, git status, `dev/active` items                                                                   |
+| `PreToolUse` (Bash)          | `playwright-test-guard.sh`   | Denies `git push` when frontend files were edited but no browser tool ran. Bypass: `SKIP_PLAYWRIGHT_GUARD=1 git push ...` |
+| `PostToolUse` (Edit\|Write)  | `post-tool-use-tracker.sh`   | Logs which area of the monorepo was touched                                                                               |
+| `PostToolUse` (Edit\|Write)  | `auto-format.sh`             | Runs Prettier on the edited file                                                                                          |
+| `PostToolUse` (playwright)   | `playwright-test-tracker.sh` | Marks the session as browser-verified                                                                                     |
+| `PostToolUse` (ExitPlanMode) | `post-plan-review.sh`        | Routes an approved plan through review and onto a branch                                                                  |
+| `Notification`               | `notify.sh`                  | Telegram ping on permission and idle prompts                                                                              |
+
+Run `.claude/hooks/test-hooks.sh` after changing any of them.
+
+There is no `PreCompact` hook: Claude Code ignores hook output on that event,
+so one could not inject anything. Run `/dev-docs-update` before compacting.
 
 ## CI/CD Pipeline
 
 GitHub Actions workflows in `.github/workflows/`:
 
-| Workflow                 | Purpose                                    | Trigger                        |
-| ------------------------ | ------------------------------------------ | ------------------------------ |
-| `ci.yml`                 | Build, Lint, Test, Prisma, Security        | Every push/PR to main          |
-| `codeql.yml`             | SAST Analysis                              | Every push/PR + Weekly         |
-| `container-security.yml` | Container Scan (Trivy)                     | When Dockerfiles change        |
-| `plan-review.yml`        | AI plan review (Claude Opus/Sonnet/Gemini) | Push to plan/\*, PR with plans |
+| Workflow                 | Purpose                                                                 | Trigger                   |
+| ------------------------ | ----------------------------------------------------------------------- | ------------------------- |
+| `ci.yml`                 | `quality`, `build-test`, `security`, `e2e` in parallel; `smoke` on main | Every push/PR to main     |
+| `codeql.yml`             | SAST analysis (the blocking security gate)                              | Every push/PR + weekly    |
+| `container-security.yml` | Trivy Dockerfile config + CVE scan                                      | When Dockerfiles change   |
+| `plan-review.yml`        | Claude plan review, posts a `VERDICT:` line                             | PR changing a `*-plan.md` |
 
-**CI checks include:** format, lint, prisma validate/generate, build, test, **outdated/deprecated packages (strict)**, dependency audit, license check, Gitleaks secret scanning.
+**Jobs:** `quality` (format, lint, deprecated-package check), `build-test`
+(prisma validate/generate, build, 151 tests), `security` (dependency audit,
+license compliance, Gitleaks), `e2e` (Playwright + axe-core), and `smoke`, which
+polls the Render health endpoint after a merge to `main`.
+
+The dependency audit reports to the step summary rather than failing the build —
+every current high-severity advisory is transitive through `@prisma/client`,
+`@sentry/nextjs`, or the Next toolchain. Dependabot security updates are the
+remediation path. Deprecated packages still fail.
+
+`main` is protected by a ruleset: PR required, no force-push, no deletion, admin
+bypass.
 
 **CI secrets required:**
 
@@ -410,7 +447,7 @@ GitHub Actions workflows in `.github/workflows/`:
 
 **Note:** CI runs tests with `pnpm -r test` (not turbo) to ensure env vars are passed correctly to Jest.
 
-**Local pre-push hook:** `.husky/pre-push` runs CI checks before every push (local only, not in git).
+**Local pre-push hook:** `.husky/pre-push` mirrors the blocking CI checks (local only, gitignored). CodeQL runs in CI, not here.
 
 ## Hosting
 
@@ -564,7 +601,9 @@ dev/active/[feature-name]/
 
 **Active work items:**
 
-- None currently
+- `claude-tooling-upgrade/` - `.claude` and CI/CD rebuild
+- `wcag-accessibility/` - Phase 4 verification
+- `analytics-statistics/`, `pawn-promotion-ui/`, `sound-effects/`
 
 **Completed:** (in `dev/completed/`)
 

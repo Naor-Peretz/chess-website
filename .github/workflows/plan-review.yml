@@ -1,316 +1,140 @@
 name: Plan Review
 
+# Reviews plan files on PRs and posts the result as a comment ending in a
+# VERDICT: line that .claude/scripts/check-plan-review.sh parses.
+#
+# PR-only by design: the previous version also ran on pushes to plan/**, where
+# it burned a full review and then discarded it, because comments can only be
+# posted against a PR.
 on:
-  push:
-    branches:
-      - 'plan/**'
-      - 'plan/*'
   pull_request:
     paths:
+      # Plan documents only. A looser '**/plan-*.md' also matched
+      # .claude/agents/plan-reviewer.md and fired on every tooling change.
+      - 'dev/**/*-plan.md'
+      - 'dev/**/plan.md'
       - '**/*.plan.md'
-      - '**/plan-*.md'
-      - 'dev/active/**/plan.md'
-      - 'dev/active/**/*-plan.md'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
-  find-plans:
+  review:
+    name: Review plans
     runs-on: ubuntu-latest
-    outputs:
-      has_plans: ${{ steps.find-plans.outputs.has_plans }}
-      plans: ${{ steps.find-plans.outputs.plans }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      # claude-code-action mints its GitHub token over OIDC; without this it
+      # fails with "Could not fetch an OIDC token".
+      id-token: write
+
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - name: Find plan files
-        id: find-plans
+      - name: Collect changed plan files
+        id: plans
         run: |
-          echo "::group::Finding plan files"
-          echo "[$(date -u +%H:%M:%S)] Event: ${{ github.event_name }}, Branch: ${{ github.head_ref || github.ref_name }}"
+          changed=$(git diff --name-only \
+            "${{ github.event.pull_request.base.sha }}" "${{ github.sha }}" \
+            | grep -E '^dev/.*(-plan|/plan)\.md$|\.plan\.md$' || true)
 
-          # Find plan files that were changed (regex matches both file.plan.md and file-plan.md)
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "[$(date -u +%H:%M:%S)] Diffing ${{ github.event.pull_request.base.sha }}..${{ github.sha }}"
-            ALL_CHANGED=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }})
-            echo "[$(date -u +%H:%M:%S)] All changed files:"
-            echo "$ALL_CHANGED"
-            CHANGED_FILES=$(echo "$ALL_CHANGED" | grep -E '(-plan\.md|\.plan\.md|plan-.*\.md)$' || true)
-          else
-            ALL_CHANGED=$(git diff --name-only HEAD~1 HEAD)
-            echo "[$(date -u +%H:%M:%S)] All changed files:"
-            echo "$ALL_CHANGED"
-            CHANGED_FILES=$(echo "$ALL_CHANGED" | grep -E '(-plan\.md|\.plan\.md|plan-.*\.md)$' || true)
-          fi
-
-          echo "[$(date -u +%H:%M:%S)] Plan files from diff: ${CHANGED_FILES:-none}"
-
-          # Fallback: check dev/active for plan files (only *-plan.md, not context/tasks)
-          if [ -z "$CHANGED_FILES" ]; then
-            echo "[$(date -u +%H:%M:%S)] No plan files in diff, scanning dev/active/"
-            ACTIVE_PLANS=$(find dev/active -name "*-plan.md" -o -name "*.plan.md" 2>/dev/null | head -5 || true)
-            echo "[$(date -u +%H:%M:%S)] Active plans found: ${ACTIVE_PLANS:-none}"
-          else
-            ACTIVE_PLANS=""
-          fi
-
-          # Combine, dedupe, and filter to files that actually exist on disk
-          # (diff may include files from earlier commits that were since deleted)
-          CANDIDATE_PLANS=$(echo -e "${CHANGED_FILES}\n${ACTIVE_PLANS}" | sort -u | grep -v '^$' | head -10)
-          ALL_PLANS=""
+          # A file can appear in the diff and be deleted by a later commit.
+          existing=""
           while IFS= read -r f; do
-            [ -z "$f" ] && continue
-            if [ -f "$f" ]; then
-              if [ -n "$ALL_PLANS" ]; then
-                ALL_PLANS="$ALL_PLANS"$'\n'"$f"
-              else
-                ALL_PLANS="$f"
-              fi
-            else
-              echo "[$(date -u +%H:%M:%S)] SKIP: $f (not on disk, deleted in later commit)"
-            fi
-          done <<< "$CANDIDATE_PLANS"
+            [ -n "$f" ] && [ -f "$f" ] && existing="${existing}${f}"$'\n'
+          done <<< "$changed"
+          existing=$(printf '%s' "$existing" | head -5)
 
-          if [ -z "$ALL_PLANS" ]; then
-            echo "[$(date -u +%H:%M:%S)] No plan files found"
-            echo "has_plans=false" >> $GITHUB_OUTPUT
+          if [ -z "$existing" ]; then
+            echo "No plan files changed in this PR"
+            echo "found=false" >> "$GITHUB_OUTPUT"
           else
-            PLAN_COUNT=$(echo "$ALL_PLANS" | wc -l)
-            echo "[$(date -u +%H:%M:%S)] Found $PLAN_COUNT plan(s):"
-            echo "$ALL_PLANS" | while read -r f; do
-              SIZE=$(wc -c < "$f" 2>/dev/null || echo "?")
-              LINES=$(wc -l < "$f" 2>/dev/null || echo "?")
-              echo "  - $f ($LINES lines, $SIZE bytes)"
-            done
-            echo "plans<<EOF" >> $GITHUB_OUTPUT
-            echo "$ALL_PLANS" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
-            echo "has_plans=true" >> $GITHUB_OUTPUT
-          fi
-          echo "::endgroup::"
-
-  review-plan-claude:
-    needs: find-plans
-    if: needs.find-plans.outputs.has_plans == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    strategy:
-      matrix:
-        model: [opus, sonnet]
-    permissions:
-      contents: read
-      pull-requests: write
-      issues: write
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-
-      - name: Install Claude Code
-        run: npm install -g @anthropic-ai/claude-code
-
-      - name: Review plans with Claude Code (${{ matrix.model }})
-        id: review
-        continue-on-error: true
-        env:
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-        run: |
-          MODEL="${{ matrix.model }}"
-          REVIEW_OUTPUT="/tmp/plan-review-${MODEL}.md"
-          ERROR_LOG="/tmp/claude-error.log"
-
-          echo "::group::Setup"
-          echo "[$(date -u +%H:%M:%S)] Model: $MODEL"
-          echo "[$(date -u +%H:%M:%S)] Claude Code version: $(claude --version 2>/dev/null || echo 'unknown')"
-          echo "[$(date -u +%H:%M:%S)] OAuth token set: $([ -n \"$CLAUDE_CODE_OAUTH_TOKEN\" ] && echo 'yes' || echo 'NO - MISSING!')"
-          echo "::endgroup::"
-
-          echo "# Claude Plan Review (${MODEL^^})" > "$REVIEW_OUTPUT"
-          echo "" >> "$REVIEW_OUTPUT"
-          echo "*Automated review by Claude Code (plan-reviewer agent, model: ${MODEL})*" >> "$REVIEW_OUTPUT"
-          echo "" >> "$REVIEW_OUTPUT"
-
-          REVIEW_SUCCESS=true
-          PLAN_NUM=0
-          TOTAL_PLANS=$(echo "${{ needs.find-plans.outputs.plans }}" | grep -c '[^ ]' || echo 0)
-
-          while IFS= read -r plan_file; do
-            [ -z "$plan_file" ] && continue
-            [ ! -f "$plan_file" ] && { echo "[$(date -u +%H:%M:%S)] SKIP: $plan_file (file not found)"; continue; }
-
-            PLAN_NUM=$((PLAN_NUM + 1))
-            FILE_SIZE=$(wc -c < "$plan_file")
-            FILE_LINES=$(wc -l < "$plan_file")
-
-            echo "::group::Review $PLAN_NUM/$TOTAL_PLANS: $plan_file ($MODEL)"
-            echo "[$(date -u +%H:%M:%S)] START reviewing: $plan_file"
-            echo "[$(date -u +%H:%M:%S)] File size: $FILE_LINES lines, $FILE_SIZE bytes"
-
-            echo "---" >> "$REVIEW_OUTPUT"
-            echo "" >> "$REVIEW_OUTPUT"
-            echo "## Plan: $plan_file" >> "$REVIEW_OUTPUT"
-            echo "" >> "$REVIEW_OUTPUT"
-
-            # Build prompt file to avoid shell quoting issues
-            PROMPT_FILE=$(mktemp "/tmp/plan-prompt-${MODEL}-XXXXXXXX.txt")
+            echo "Reviewing:"; echo "$existing"
+            echo "found=true" >> "$GITHUB_OUTPUT"
             {
-              echo "You are a plan reviewer. Review the following implementation plan for a chess website project."
-              echo "Evaluate: completeness, feasibility, risks, missing considerations, and suggested improvements."
-              echo "Be concise - provide key findings in a structured format."
-              echo ""
-              echo "---"
-              echo "File: $plan_file"
-              echo ""
-              cat "$plan_file"
-              echo "---"
-            } > "$PROMPT_FILE"
-
-            PROMPT_SIZE=$(wc -c < "$PROMPT_FILE")
-            echo "[$(date -u +%H:%M:%S)] Prompt size: $PROMPT_SIZE bytes"
-            echo "[$(date -u +%H:%M:%S)] Running: timeout 300 claude -p --model $MODEL --max-turns 5 --output-format text (no agent)"
-
-            START_TIME=$(date +%s)
-
-            # Run Claude Code WITHOUT --agent to avoid codebase exploration (plan content is in the prompt)
-            # --max-turns 5: allow enough turns for thorough plan review
-            if timeout 300 bash -c "cat '$PROMPT_FILE' | claude -p --model '$MODEL' --max-turns 5 --output-format text" \
-              >> "$REVIEW_OUTPUT" 2> "$ERROR_LOG"; then
-              END_TIME=$(date +%s)
-              DURATION=$((END_TIME - START_TIME))
-              echo "[$(date -u +%H:%M:%S)] SUCCESS: $plan_file reviewed in ${DURATION}s"
-            else
-              EXIT_CODE=$?
-              END_TIME=$(date +%s)
-              DURATION=$((END_TIME - START_TIME))
-              REVIEW_SUCCESS=false
-
-              echo "[$(date -u +%H:%M:%S)] FAILED: exit code $EXIT_CODE after ${DURATION}s"
-
-              # Log stderr
-              if [ -s "$ERROR_LOG" ]; then
-                echo "[$(date -u +%H:%M:%S)] Error log contents:"
-                cat "$ERROR_LOG"
-              else
-                echo "[$(date -u +%H:%M:%S)] Error log is empty"
-              fi
-
-              echo "" >> "$REVIEW_OUTPUT"
-              echo "**Review Failed**" >> "$REVIEW_OUTPUT"
-              echo "" >> "$REVIEW_OUTPUT"
-
-              if [ "$EXIT_CODE" = "124" ]; then
-                echo "Claude Code timed out after 5 minutes." >> "$REVIEW_OUTPUT"
-                echo "[$(date -u +%H:%M:%S)] TIMEOUT: Claude Code exceeded 5-minute limit"
-              else
-                ERROR_MSG=$(cat "$ERROR_LOG" 2>/dev/null || echo "No error log")
-                echo "Claude Code encountered an error (exit code: $EXIT_CODE):" >> "$REVIEW_OUTPUT"
-                echo "" >> "$REVIEW_OUTPUT"
-                echo '```' >> "$REVIEW_OUTPUT"
-                echo "$ERROR_MSG" >> "$REVIEW_OUTPUT"
-                echo '```' >> "$REVIEW_OUTPUT"
-              fi
-
-              echo "" >> "$REVIEW_OUTPUT"
-              echo "Please review this plan manually." >> "$REVIEW_OUTPUT"
-            fi
-
-            echo "" >> "$REVIEW_OUTPUT"
-            echo "::endgroup::"
-          done <<< "${{ needs.find-plans.outputs.plans }}"
-
-          echo "[$(date -u +%H:%M:%S)] All reviews complete. Success: $REVIEW_SUCCESS"
-          echo ""
-          echo "::group::Review output"
-          cat "$REVIEW_OUTPUT"
-          echo "::endgroup::"
-
-          if [ "$REVIEW_SUCCESS" = false ]; then
-            exit 1
+              echo "files<<PLANS_EOF"
+              echo "$existing"
+              echo "PLANS_EOF"
+            } >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Post review comment
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const model = '${{ matrix.model }}';
-            const reviewPath = `/tmp/plan-review-${model}.md`;
-
-            let body;
-            if (fs.existsSync(reviewPath)) {
-              body = fs.readFileSync(reviewPath, 'utf8');
-            } else {
-              body = '# Claude Plan Review (' + model.toUpperCase() + ')\n\n**Review Unavailable**\n\nThe automated plan review could not be completed. Please review manually.';
-            }
-
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: body
-            });
-
-  review-plan-gemini:
-    needs: find-plans
-    if: needs.find-plans.outputs.has_plans == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-      pull-requests: write
-      issues: write
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-
-      - name: Install dependencies
-        run: cd .github/scripts && npm install
-
-      - name: Review plans with Gemini
+      - name: Review with Claude
         id: review
-        continue-on-error: true
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GEMINI_MODEL: gemini-2.0-flash
-          PLAN_FILES: ${{ needs.find-plans.outputs.plans }}
-          REVIEW_OUTPUT_PATH: /tmp/plan-review-gemini.md
-        run: node .github/scripts/review-plan-gemini.mjs
-
-      - name: Post review comment
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
+        if: steps.plans.outputs.found == 'true'
+        uses: anthropics/claude-code-action@v1
         with:
-          script: |
-            const fs = require('fs');
-            const reviewPath = '/tmp/plan-review-gemini.md';
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Use the workflow token rather than exchanging an app token. Without
+          # this the action requires the Claude GitHub App to be installed on
+          # the repository (https://github.com/apps/claude) and fails 401.
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          # 5 turns was enough for the old prompt, which only read the plan
+          # text inline. This one reads CLAUDE.md and the source the plan names,
+          # which costs a turn each — a real review of a large plan measured 32
+          # turns and ~13 minutes. timeout-minutes is the backstop.
+          claude_args: '--model opus --max-turns 60'
+          prompt: |
+            Review the implementation plan(s) in these files, using the
+            plan-reviewer agent definition at .claude/agents/plan-reviewer.md
+            as your standard:
 
-            let body;
-            if (fs.existsSync(reviewPath)) {
-              body = fs.readFileSync(reviewPath, 'utf8');
-            } else {
-              body = '# Gemini Plan Review\n\n**Review Unavailable**\n\nThe automated plan review could not be completed. Please review manually.';
-            }
+            ${{ steps.plans.outputs.files }}
 
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: body
-            });
+            This is the chess-website monorepo: pnpm workspaces and Turborepo,
+            Next.js 16 App Router frontend, Express 5 and Prisma 7 backend,
+            PostgreSQL on Supabase. Read CLAUDE.md and the code the plan names
+            before judging it — most bad plans are internally consistent and
+            wrong about one fact regarding this codebase.
+
+            Report blocking issues first, then gaps, then smaller notes. Cite
+            file:line. Only raise genuine problems; if the plan is sound, say so.
+
+            Return the review as your final message. Do not try to post it
+            yourself — the next workflow step does that.
+
+            End your final message with exactly one line, nothing after it:
+
+            VERDICT: APPROVED
+
+            or `VERDICT: NEEDS REVISION`, or `VERDICT: MAJOR CHANGES NEEDED`.
+            Tooling greps for that line, so it must appear verbatim and once.
+
+      # Posting from the workflow rather than asking Claude to do it: in prompt
+      # mode the action gives it no comment tool, so the review ran fine and
+      # silently went nowhere.
+      - name: Post the review
+        if: steps.plans.outputs.found == 'true' && steps.review.outputs.execution_file != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EXECUTION_FILE: ${{ steps.review.outputs.execution_file }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          body=$(jq -r '
+            [.. | objects | select(.type? == "result") | .result // empty] | last // ""
+          ' "$EXECUTION_FILE")
+
+          if [ -z "$body" ]; then
+            echo "No result text in $EXECUTION_FILE — nothing to post"
+            exit 0
+          fi
+
+          {
+            echo '## Claude Plan Review'
+            echo
+            printf '%s\n' "$body"
+          } > /tmp/review.md
+
+          gh pr comment "$PR_NUMBER" --body-file /tmp/review.md
+          echo "Posted review ($(wc -c < /tmp/review.md) bytes)"
+
+          grep -E '^VERDICT: (APPROVED|NEEDS REVISION|MAJOR CHANGES NEEDED)$' /tmp/review.md \
+            || echo "::warning::Review has no parseable VERDICT line"

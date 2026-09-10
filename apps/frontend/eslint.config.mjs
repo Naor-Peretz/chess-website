@@ -18,6 +18,10 @@ const eslintConfig = defineConfig([
   // Rules with existing violations as "warn" (fix gradually, then promote to error)
   {
     rules: {
+      // Backend and shared already enforce this; the frontend was the gap left
+      // when the console.log hooks were removed.
+      "no-console": ["warn", { allow: ["warn", "error"] }],
+
       // --- Errors: prevent new violations ---
       "jsx-a11y/alt-text": "error",
       "jsx-a11y/aria-props": "error",

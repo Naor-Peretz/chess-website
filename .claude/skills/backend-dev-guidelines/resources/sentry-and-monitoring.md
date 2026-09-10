@@ -1,6 +1,6 @@
 # Sentry Integration and Monitoring
 
-Complete guide to error tracking and performance monitoring with Sentry v8.
+Complete guide to error tracking and performance monitoring with Sentry v10.
 
 ## Table of Contents
 
@@ -18,7 +18,7 @@ Complete guide to error tracking and performance monitoring with Sentry v8.
 
 **MANDATORY**: All errors MUST be captured to Sentry. No exceptions.
 
-**ALL ERRORS MUST BE CAPTURED** - Use Sentry v8 with comprehensive error tracking across all services.
+**ALL ERRORS MUST BE CAPTURED** - Use Sentry v10 with comprehensive error tracking across all services.
 
 ---
 
@@ -131,24 +131,6 @@ protected handleError(error: unknown, res: Response, context: string, statusCode
 }
 ```
 
-### 2. Workflow Error Handling
-
-```typescript
-import { SentryHelper } from '../utils/sentryHelper';
-
-try {
-  await businessOperation();
-} catch (error) {
-  SentryHelper.captureOperationError(error, {
-    operationType: 'POST_CREATION',
-    entityId: 123,
-    userId: 'user-123',
-    operation: 'createPost',
-  });
-  throw error;
-}
-```
-
 ### 3. Service Layer Error Handling
 
 ```typescript
@@ -206,55 +188,6 @@ router.post('/operation', async (req, res) => {
     }
   );
 });
-```
-
----
-
-## Cron Job Monitoring
-
-### Mandatory Pattern
-
-```typescript
-#!/usr/bin/env node
-import '../instrument'; // FIRST LINE after shebang
-import * as Sentry from '@sentry/node';
-
-async function main() {
-  return await Sentry.startSpan(
-    {
-      name: 'cron.job-name',
-      op: 'cron',
-      attributes: {
-        'cron.job': 'job-name',
-        'cron.startTime': new Date().toISOString(),
-      },
-    },
-    async () => {
-      try {
-        // Cron job logic here
-      } catch (error) {
-        Sentry.captureException(error, {
-          tags: {
-            'cron.job': 'job-name',
-            'error.type': 'execution_error',
-          },
-        });
-        console.error('[Cron] Error:', error);
-        process.exit(1);
-      }
-    }
-  );
-}
-
-main()
-  .then(() => {
-    console.log('[Cron] Completed successfully');
-    process.exit(0);
-  })
-  .catch((error) => {
-    console.error('[Cron] Fatal error:', error);
-    process.exit(1);
-  });
 ```
 
 ---

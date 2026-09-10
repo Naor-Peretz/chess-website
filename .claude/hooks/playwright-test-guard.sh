@@ -1,67 +1,51 @@
 #!/bin/bash
-# Pre-tool-use hook that blocks git push if frontend files were edited
-# but Playwright tests weren't run in this session
+# PreToolUse(Bash): CLAUDE.md requires Playwright verification of affected pages
+# before pushing frontend changes. Claude cannot check its own session history
+# for that, so this hook does.
+#
+# Denies with permissionDecision rather than a non-zero exit: exit 1 is a
+# non-blocking hook error and the push would go through anyway.
+#
+# Bypass: include SKIP_PLAYWRIGHT_GUARD=1 in the command itself. Hooks are
+# spawned by Claude Code, not by the Bash tool's shell, so a variable prefixed
+# onto the command never reaches this process — the bypass has to be read out of
+# the command text. An exported variable in the session environment also works.
+set -uo pipefail
 
-# Read tool information from stdin
-tool_info=$(cat)
+input=$(cat)
 
-# Extract relevant data
-tool_name=$(echo "$tool_info" | jq -r '.tool_name // empty')
-command=$(echo "$tool_info" | jq -r '.tool_input.command // empty')
-session_id=$(echo "$tool_info" | jq -r '.session_id // empty')
+tool_name=$(jq -r '.tool_name // empty' <<<"$input")
+command=$(jq -r '.tool_input.command // empty' <<<"$input")
+session_id=$(jq -r '.session_id // empty' <<<"$input")
 
-# Only check Bash commands
-if [[ "$tool_name" != "Bash" ]]; then
-    exit 0
-fi
+[ "$tool_name" = "Bash" ] || exit 0
+[[ "$command" =~ git[[:space:]]+push ]] || exit 0
+[ "${SKIP_PLAYWRIGHT_GUARD:-}" = "1" ] && exit 0
+[[ "$command" == *SKIP_PLAYWRIGHT_GUARD=1* ]] && exit 0
 
-# Only check git push commands
-if [[ ! "$command" =~ git[[:space:]]+push ]]; then
-    exit 0
-fi
+cache_dir="${CLAUDE_PROJECT_DIR:-$(pwd)}/.claude/tsc-cache/${session_id:-default}"
+edited_log="$cache_dir/edited-files.log"
 
-# Cache directory for tracking
-cache_dir="$CLAUDE_PROJECT_DIR/.claude/tsc-cache/${session_id:-default}"
+[ -f "$edited_log" ] || exit 0
+grep -qE 'apps/frontend' "$edited_log" 2>/dev/null || exit 0
+[ -f "$cache_dir/playwright-tested.marker" ] && exit 0
 
-# Check if frontend files were edited
-frontend_edited=false
-if [[ -f "$cache_dir/edited-files.log" ]]; then
-    if grep -qE "(apps/frontend|packages/shared)" "$cache_dir/edited-files.log" 2>/dev/null; then
-        frontend_edited=true
-    fi
-fi
+files=$(grep -E 'apps/frontend' "$edited_log" 2>/dev/null | cut -d: -f2 | sort -u | head -10)
 
-# If no frontend files edited, allow push
-if [[ "$frontend_edited" != "true" ]]; then
-    exit 0
-fi
+reason=$(
+  printf 'Frontend files were edited this session but no Playwright browser tool was used.\n\n'
+  printf 'CLAUDE.md requires exercising the affected pages in a browser before pushing:\n'
+  printf 'start the dev servers with `pnpm dev`, navigate to the changed pages, interact\n'
+  printf 'with what changed, and confirm it renders and behaves correctly.\n\n'
+  printf 'Edited frontend files:\n%s\n\n' "$files"
+  printf 'If browser verification genuinely does not apply here, say why, then run\n'
+  printf 'the push as: SKIP_PLAYWRIGHT_GUARD=1 git push ...\n'
+)
 
-# Check if Playwright tests were run (marker file created by browser tools)
-playwright_tested=false
-if [[ -f "$cache_dir/playwright-tested.marker" ]]; then
-    playwright_tested=true
-fi
-
-# If frontend edited but Playwright not run, BLOCK the push
-if [[ "$frontend_edited" == "true" && "$playwright_tested" != "true" ]]; then
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "🚫 PUSH BLOCKED: Playwright UI tests required"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo ""
-    echo "Frontend files were modified but no Playwright tests were run."
-    echo ""
-    echo "Before pushing, please:"
-    echo "  1. Start dev servers: pnpm dev"
-    echo "  2. Navigate to affected pages using browser_navigate"
-    echo "  3. Test the new/changed functionality"
-    echo "  4. Verify visual feedback works correctly"
-    echo ""
-    echo "Edited frontend files:"
-    grep -E "(apps/frontend|packages/shared)" "$cache_dir/edited-files.log" 2>/dev/null | cut -d: -f2 | sort -u | head -10
-    echo ""
-    echo "To bypass (not recommended): touch $cache_dir/playwright-tested.marker"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    exit 1
-fi
-
-exit 0
+jq -n --arg reason "$reason" '{
+  hookSpecificOutput: {
+    hookEventName: "PreToolUse",
+    permissionDecision: "deny",
+    permissionDecisionReason: $reason
+  }
+}'

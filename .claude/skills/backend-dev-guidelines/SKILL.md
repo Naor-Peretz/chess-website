@@ -1,13 +1,14 @@
 ---
 name: backend-dev-guidelines
-description: Comprehensive backend development guide for Node.js/Express/TypeScript microservices. Use when creating routes, controllers, services, repositories, middleware, or working with Express APIs, Prisma database access, Sentry error tracking, Zod validation, unifiedConfig, dependency injection, or async patterns. Covers layered architecture (routes → controllers → services → repositories), BaseController pattern, error handling, performance monitoring, testing strategies, and migration from legacy patterns.
+description: |
+  Patterns for the Express 5 + Prisma 7 backend in apps/backend. Use when adding or changing a route, controller, service, repository, or middleware; when writing a Prisma query or migration; when validating input with Zod; or when wiring Sentry error tracking. Covers the layered architecture, BaseController and BaseRepository, unifiedConfig, optimistic locking, and the backend test setup.
 ---
 
 # Backend Development Guidelines
 
 ## Purpose
 
-Establish consistency and best practices across backend microservices (blog-api, auth-service, notifications-service) using modern Node.js/Express/TypeScript patterns.
+Keep `apps/backend` consistent: one layered architecture, one error path to Sentry, one place configuration comes from.
 
 ## When to Use This Skill
 
@@ -36,16 +37,6 @@ Automatically activates when working on:
 - [ ] **Sentry**: Error tracking
 - [ ] **Tests**: Unit + integration tests
 - [ ] **Config**: Use unifiedConfig
-
-### New Microservice Checklist
-
-- [ ] Directory structure (see [architecture-overview.md](architecture-overview.md))
-- [ ] instrument.ts for Sentry
-- [ ] unifiedConfig setup
-- [ ] BaseController class
-- [ ] Middleware stack
-- [ ] Error boundary
-- [ ] Testing framework
 
 ---
 
