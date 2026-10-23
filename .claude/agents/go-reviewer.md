@@ -278,5 +278,3 @@ govulncheck ./...
 - Check `go.mod` for minimum Go version
 - Note if code uses features from newer Go versions (generics 1.18+, fuzzing 1.18+)
 - Flag deprecated functions from standard library
-
-Review with the mindset: "Would this code pass review at Google or a top Go shop?"

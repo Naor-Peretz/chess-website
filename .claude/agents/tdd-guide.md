@@ -20,14 +20,20 @@ You are a Test-Driven Development (TDD) specialist who ensures all code is devel
 ### Step 1: Write Test First (RED)
 
 ```typescript
-// ALWAYS start with a failing test
-describe('searchMarkets', () => {
-  it('returns semantically similar markets', async () => {
-    const results = await searchMarkets('election');
+// Start with a failing test
+describe('GameService.createGame', () => {
+  it('creates a game with the starting position', async () => {
+    const mockRepository = { create: jest.fn(), findById: jest.fn() };
+    const service = new GameService(mockRepository as unknown as GameRepository);
+    mockRepository.create.mockResolvedValue({ id: 'game-1', fen: STARTING_FEN });
 
-    expect(results).toHaveLength(5);
-    expect(results[0].name).toContain('Trump');
-    expect(results[1].name).toContain('Biden');
+    const game = await service.createGame(userId, {
+      difficultyLevel: 3,
+      timeControlType: 'blitz_5min',
+    });
+
+    expect(game.fen).toBe(STARTING_FEN);
+    expect(mockRepository.create).toHaveBeenCalledTimes(1);
   });
 });
 ```
@@ -42,10 +48,13 @@ npm test
 ### Step 3: Write Minimal Implementation (GREEN)
 
 ```typescript
-export async function searchMarkets(query: string) {
-  const embedding = await generateEmbedding(query);
-  const results = await vectorSearch(embedding);
-  return results;
+async createGame(userId: string, input: CreateGameInput): Promise<GameResponse> {
+  return this.gameRepository.create({
+    userId,
+    fen: STARTING_FEN,
+    difficultyLevel: input.difficultyLevel,
+    timeControlType: input.timeControlType,
+  });
 }
 ```
 
@@ -70,69 +79,82 @@ npm run test:coverage
 # Verify 80%+ coverage
 ```
 
-## Test Types You Must Write
+## Test Types
 
-### 1. Unit Tests (Mandatory)
+### 1. Unit Tests
 
-Test individual functions in isolation:
+Test services and functions in isolation with a mocked repository:
 
 ```typescript
-import { calculateSimilarity } from './utils';
+import { GameService } from '../gameService';
+import type { GameRepository } from '../../repositories/GameRepository';
 
-describe('calculateSimilarity', () => {
-  it('returns 1.0 for identical embeddings', () => {
-    const embedding = [0.1, 0.2, 0.3];
-    expect(calculateSimilarity(embedding, embedding)).toBe(1.0);
+describe('GameService.getGame', () => {
+  const mockRepository = { create: jest.fn(), findById: jest.fn() };
+  const service = new GameService(mockRepository as unknown as GameRepository);
+
+  it('returns the game when the user owns it', async () => {
+    mockRepository.findById.mockResolvedValue({ id: 'game-1', userId: 'user-1' });
+    const game = await service.getGame('game-1', 'user-1');
+    expect(game.id).toBe('game-1');
   });
 
-  it('returns 0.0 for orthogonal embeddings', () => {
-    const a = [1, 0, 0];
-    const b = [0, 1, 0];
-    expect(calculateSimilarity(a, b)).toBe(0.0);
+  it('throws when the game belongs to another user', async () => {
+    mockRepository.findById.mockResolvedValue({ id: 'game-1', userId: 'user-2' });
+    await expect(service.getGame('game-1', 'user-1')).rejects.toThrow();
   });
 
-  it('handles null gracefully', () => {
-    expect(() => calculateSimilarity(null, [])).toThrow();
+  it('throws when the game does not exist', async () => {
+    mockRepository.findById.mockResolvedValue(null);
+    await expect(service.getGame('missing', 'user-1')).rejects.toThrow();
   });
 });
 ```
 
-### 2. Integration Tests (Mandatory)
+### 2. Integration Tests
 
-Test API endpoints and database operations:
+Test API endpoints with supertest, mocking auth and services via the service container:
 
 ```typescript
-import { NextRequest } from 'next/server';
-import { GET } from './route';
+import request from 'supertest';
+import app from '../../app';
 
-describe('GET /api/markets/search', () => {
-  it('returns 200 with valid results', async () => {
-    const request = new NextRequest('http://localhost/api/markets/search?q=trump');
-    const response = await GET(request, {});
-    const data = await response.json();
+jest.mock('../../services/serviceContainer', () => ({
+  services: {
+    authService: { verifyToken: mockVerifyToken },
+    gameService: mockGameService,
+  },
+}));
 
-    expect(response.status).toBe(200);
-    expect(data.success).toBe(true);
-    expect(data.results.length).toBeGreaterThan(0);
+describe('POST /api/games', () => {
+  it('creates a game and returns 201', async () => {
+    mockGameService.createGame.mockResolvedValue({ id: 'game-1', fen: STARTING_FEN });
+
+    const response = await request(app)
+      .post('/api/games')
+      .set('Authorization', 'Bearer token')
+      .send({ difficultyLevel: 3, timeControlType: 'blitz_5min' });
+
+    expect(response.status).toBe(201);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data.id).toBe('game-1');
   });
 
-  it('returns 400 for missing query', async () => {
-    const request = new NextRequest('http://localhost/api/markets/search');
-    const response = await GET(request, {});
+  it('returns 400 for invalid difficulty', async () => {
+    const response = await request(app)
+      .post('/api/games')
+      .set('Authorization', 'Bearer token')
+      .send({ difficultyLevel: 99, timeControlType: 'blitz_5min' });
 
     expect(response.status).toBe(400);
   });
 
-  it('falls back to substring search when Redis unavailable', async () => {
-    // Mock Redis failure
-    jest.spyOn(redis, 'searchMarketsByVector').mockRejectedValue(new Error('Redis down'));
+  it('returns 401 without a token', async () => {
+    const response = await request(app)
+      .post('/api/games')
+      .send({ difficultyLevel: 3, timeControlType: 'blitz_5min' });
 
-    const request = new NextRequest('http://localhost/api/markets/search?q=test');
-    const response = await GET(request, {});
-    const data = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(data.fallback).toBe(true);
+    expect(response.status).toBe(401);
   });
 });
 ```
@@ -144,69 +166,47 @@ Test complete user journeys with Playwright:
 ```typescript
 import { test, expect } from '@playwright/test';
 
-test('user can search and view market', async ({ page }) => {
-  await page.goto('/');
+test('user can create and open a new game', async ({ page }) => {
+  await page.goto('/game/new');
 
-  // Search for market
-  await page.fill('input[placeholder="Search markets"]', 'election');
-  await page.waitForTimeout(600); // Debounce
+  // Choose difficulty and time control
+  await page.getByRole('radio', { name: 'Level 3' }).click();
+  await page.getByRole('radio', { name: 'Blitz 5 min' }).click();
 
-  // Verify results
-  const results = page.locator('[data-testid="market-card"]');
-  await expect(results).toHaveCount(5, { timeout: 5000 });
+  // Start the game
+  await page.getByRole('button', { name: 'Start game' }).click();
 
-  // Click first result
-  await results.first().click();
-
-  // Verify market page loaded
-  await expect(page).toHaveURL(/\/markets\//);
-  await expect(page.locator('h1')).toBeVisible();
+  // Verify the board loaded
+  await expect(page).toHaveURL(/\/game\/[0-9a-f-]+/);
+  await expect(page.getByRole('region', { name: /chess board/i })).toBeVisible();
 });
 ```
 
-## Mocking External Dependencies
+## Mocking Dependencies
 
-### Mock Supabase
+### Mock the repository (unit tests)
 
 ```typescript
-jest.mock('@/lib/supabase', () => ({
-  supabase: {
-    from: jest.fn(() => ({
-      select: jest.fn(() => ({
-        eq: jest.fn(() =>
-          Promise.resolve({
-            data: mockMarkets,
-            error: null,
-          })
-        ),
-      })),
-    })),
+const mockRepository = {
+  create: jest.fn(),
+  findById: jest.fn(),
+  addMoveWithVersion: jest.fn(),
+};
+const service = new GameService(mockRepository as unknown as GameRepository);
+```
+
+### Mock the service container (controller tests)
+
+```typescript
+jest.mock('../../services/serviceContainer', () => ({
+  services: {
+    authService: { verifyToken: mockVerifyToken },
+    gameService: mockGameService,
   },
 }));
 ```
 
-### Mock Redis
-
-```typescript
-jest.mock('@/lib/redis', () => ({
-  searchMarketsByVector: jest.fn(() =>
-    Promise.resolve([
-      { slug: 'test-1', similarity_score: 0.95 },
-      { slug: 'test-2', similarity_score: 0.9 },
-    ])
-  ),
-}));
-```
-
-### Mock OpenAI
-
-```typescript
-jest.mock('@/lib/openai', () => ({
-  generateEmbedding: jest.fn(() => Promise.resolve(new Array(1536).fill(0.1))),
-}));
-```
-
-## Edge Cases You MUST Test
+## Edge Cases to Cover
 
 1. **Null/Undefined**: What if input is null?
 2. **Empty**: What if array/string is empty?
@@ -299,5 +299,3 @@ npm test && npm run lint
 # CI/CD integration
 npm test -- --coverage --ci
 ```
-
-**Remember**: No code without tests. Tests are not optional. They are the safety net that enables confident refactoring, rapid development, and production reliability.

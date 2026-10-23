@@ -46,7 +46,7 @@ Automatically activates when you mention:
 - **Method**: Analyzes edited files for risky patterns, displays reminder if needed
 - **Use Cases**: Error handling awareness without blocking friction
 
-**Philosophy Change (2025-10-27):** We moved away from blocking PreToolUse for Sentry/error handling. Instead, use gentle post-response reminders that don't block workflow but maintain code quality awareness.
+Error-handling awareness uses gentle post-response reminders rather than blocking PreToolUse, so workflow is never interrupted.
 
 ### Configuration File
 
@@ -455,11 +455,3 @@ See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for complete debugging guide.
 **All Skills:**
 
 - `.claude/skills/*/SKILL.md` - Skill content files
-
----
-
-**Skill Status**: COMPLETE - Restructured following Anthropic best practices ✅
-**Line Count**: < 500 (following 500-line rule) ✅
-**Progressive Disclosure**: Reference files for detailed information ✅
-
-**Next**: Create more skills, refine patterns based on usage

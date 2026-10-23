@@ -8,16 +8,13 @@ version: 2.0.0
 
 An advanced learning system that turns your Claude Code sessions into reusable knowledge through atomic "instincts" - small learned behaviors with confidence scoring.
 
-## What's New in v2
+## Capabilities
 
-| Feature     | v1                      | v2                                        |
-| ----------- | ----------------------- | ----------------------------------------- |
-| Observation | Stop hook (session end) | PreToolUse/PostToolUse (100% reliable)    |
-| Analysis    | Main context            | Background agent (Haiku)                  |
-| Granularity | Full skills             | Atomic "instincts"                        |
-| Confidence  | None                    | 0.3-0.9 weighted                          |
-| Evolution   | Direct to skill         | Instincts → cluster → skill/command/agent |
-| Sharing     | None                    | Export/import instincts                   |
+- Observes sessions via PreToolUse/PostToolUse hooks
+- Analyzes observations with a background Haiku agent
+- Creates atomic instincts with 0.3–0.9 confidence scoring
+- Evolves clustered instincts into skills, commands, and agents
+- Exports and imports instincts for sharing
 
 ## The Instinct Model
 
@@ -270,11 +267,9 @@ Confidence evolves over time:
 - Pattern isn't observed for extended periods
 - Contradicting evidence appears
 
-## Why Hooks vs Skills for Observation?
+## Why Hooks for Observation
 
-> "v1 relied on skills to observe. Skills are probabilistic—they fire ~50-80% of the time based on Claude's judgment."
-
-Hooks fire **100% of the time**, deterministically. This means:
+Hooks fire deterministically on every tool call, so every action is observed and no patterns are missed:
 
 - Every tool call is observed
 - No patterns are missed

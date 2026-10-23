@@ -2,6 +2,8 @@
 
 TypeScript best practices for type safety and maintainability in React frontend code.
 
+> Convention note: this project uses plain function components (`export function Component(props: Props)`), not `React.FC`. Some examples below still show `React.FC` for brevity — prefer the function form. Shared domain types come from `@chess-website/shared`; the only path alias is `@/` → `src/`.
+
 ---
 
 ## Strict Mode
@@ -109,12 +111,10 @@ function useMyData(id: number): { data: Data; isLoading: boolean } {
 
 ```typescript
 // ✅ CORRECT - Explicitly mark as type import
-import type { User } from '~types/user';
-import type { Post } from '~types/post';
-import type { SxProps, Theme } from '@mui/material';
+import type { User, GameResponse } from '@chess-website/shared';
 
 // ❌ AVOID - Mixed value and type imports
-import { User } from '~types/user'; // Unclear if type or value
+import { User } from '@chess-website/shared'; // Unclear if type or value
 ```
 
 **Benefits:**
@@ -243,12 +243,11 @@ const userMap: Record<string, User> = {
   user2: { id: 2, name: 'Jane' },
 };
 
-// For styles
-import type { SxProps, Theme } from '@mui/material';
-
-const styles: Record<string, SxProps<Theme>> = {
-  container: { p: 2 },
-  header: { mb: 1 },
+// For lookup maps (styling here is Tailwind classNames, not style objects)
+const DIFFICULTY_LABELS: Record<number, string> = {
+  1: 'Beginner',
+  3: 'Medium',
+  5: 'Master',
 };
 ```
 
@@ -415,5 +414,5 @@ if (data) {
 
 **See Also:**
 
-- [component-patterns.md](component-patterns.md) - Component typing
-- [data-fetching.md](data-fetching.md) - API typing
+- `SKILL.md` — component structure, data fetching, and App Router conventions
+- Shared types: `@chess-website/shared`

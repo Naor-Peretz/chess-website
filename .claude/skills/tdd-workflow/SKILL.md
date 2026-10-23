@@ -19,7 +19,7 @@ This skill ensures all code development follows TDD principles with comprehensiv
 
 ### 1. Tests BEFORE Code
 
-ALWAYS write tests first, then implement code to make tests pass.
+Write tests first, then implement code to make them pass.
 
 ### 2. Coverage Requirements
 
@@ -338,48 +338,24 @@ npm run test:coverage
 
 ## Common Testing Mistakes to Avoid
 
-### ❌ WRONG: Testing Implementation Details
-
-```typescript
-// Don't test internal state
-expect(component.state.count).toBe(5);
-```
-
-### ✅ CORRECT: Test User-Visible Behavior
+### Test user-visible behavior, not implementation details
 
 ```typescript
 // Test what users see
 expect(screen.getByText('Count: 5')).toBeInTheDocument();
+// Avoid asserting on internal state, e.g. expect(component.state.count).toBe(5);
 ```
 
-### ❌ WRONG: Brittle Selectors
-
-```typescript
-// Breaks easily
-await page.click('.css-class-xyz');
-```
-
-### ✅ CORRECT: Semantic Selectors
+### Use semantic selectors, not brittle ones
 
 ```typescript
 // Resilient to changes
 await page.click('button:has-text("Submit")');
 await page.click('[data-testid="submit-button"]');
+// Avoid CSS-hash selectors that break easily, e.g. page.click('.css-class-xyz');
 ```
 
-### ❌ WRONG: No Test Isolation
-
-```typescript
-// Tests depend on each other
-test('creates user', () => {
-  /* ... */
-});
-test('updates same user', () => {
-  /* depends on previous test */
-});
-```
-
-### ✅ CORRECT: Independent Tests
+### Keep tests isolated
 
 ```typescript
 // Each test sets up its own data
@@ -392,6 +368,7 @@ test('updates user', () => {
   const user = createTestUser();
   // Update logic
 });
+// Avoid tests that depend on each other or share mutable state across cases
 ```
 
 ## Continuous Testing
@@ -441,7 +418,3 @@ npm test && npm run lint
 - Fast test execution (< 30s for unit tests)
 - E2E tests cover critical user flows
 - Tests catch bugs before production
-
----
-
-**Remember**: Tests are not optional. They are the safety net that enables confident refactoring, rapid development, and production reliability.

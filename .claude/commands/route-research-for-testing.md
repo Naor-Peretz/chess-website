@@ -18,20 +18,10 @@ User-specified additional routes: `$ARGUMENTS`
 
 ## Your task
 
-Follow the numbered steps **exactly**:
+Steps:
 
 1. Combine the auto list with `$ARGUMENTS`, dedupe, and resolve any prefixes
    defined in `src/app.ts`.
 2. For each final route, output a JSON record with the path, method, expected
    request/response shapes, and valid + invalid payload examples.
-3. **Now call the `Task` tool** using:
-
-```json
-{
-  "tool": "Task",
-  "parameters": {
-    "description": "route smoke tests",
-    "prompt": "Run the auth-route-tester sub-agent on the JSON above."
-  }
-}
-```
+3. Launch the `auth-route-tester` agent to run smoke tests against the JSON produced above.

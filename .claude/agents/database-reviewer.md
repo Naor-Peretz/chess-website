@@ -44,7 +44,7 @@ psql -c "SELECT relname, n_dead_tup, last_vacuum, last_autovacuum FROM pg_stat_u
 
 ## Database Review Workflow
 
-### 1. Query Performance Review (CRITICAL)
+### 1. Query Performance Review
 
 For every SQL query, verify:
 
@@ -65,7 +65,7 @@ c) Common Issues
    - Wrong column order in indexes
 ```
 
-### 2. Schema Design Review (HIGH)
+### 2. Schema Design Review
 
 ```
 a) Data Types
@@ -86,7 +86,7 @@ c) Naming
    - Consistent naming patterns
 ```
 
-### 3. Security Review (CRITICAL)
+### 3. Security Review
 
 ```
 a) Row Level Security
