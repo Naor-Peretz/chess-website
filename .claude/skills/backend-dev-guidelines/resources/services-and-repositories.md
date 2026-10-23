@@ -57,7 +57,7 @@ Repository executes: "Here's the data you requested"
 
 ### Excellent Example: NotificationService
 
-**File:** `/blog-api/src/services/NotificationService.ts`
+**File:** `apps/backend/src/services/NotificationService.ts`
 
 ```typescript
 // Define dependencies interface for clarity
@@ -267,7 +267,7 @@ const notification = await notificationService.createNotification({
 
 ### Example: PermissionService (Singleton)
 
-**File:** `/blog-api/src/services/permissionService.ts`
+**File:** `apps/backend/src/services/permissionService.ts`
 
 ```typescript
 import { PrismaClient } from '@prisma/client';

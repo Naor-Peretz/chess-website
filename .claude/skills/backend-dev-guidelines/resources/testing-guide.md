@@ -184,14 +184,11 @@ describe('PermissionService', () => {
 
 ## Testing Authenticated Routes
 
-### Using test-auth-route.js
+Routes behind auth are tested with Supertest against the Express app, with the
+service container mocked. There is no standalone auth-testing script.
 
 ```bash
-# Test authenticated endpoint
-node scripts/test-auth-route.js http://localhost:3002/form/api/users
-
-# Test with POST data
-node scripts/test-auth-route.js http://localhost:3002/form/api/users POST '{"email":"test@test.com"}'
+cd apps/backend && npx jest src/controllers/__tests__/gameController.test.ts
 ```
 
 ### Mock Authentication in Tests

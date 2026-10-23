@@ -56,7 +56,7 @@ Complete guide to the layered architecture pattern used in backend microservices
 └───────────────┬─────────────────────┘
                 ↓
 ┌─────────────────────────────────────┐
-│         Database (MySQL)            │
+│      Database (PostgreSQL)          │
 └─────────────────────────────────────┘
 ```
 

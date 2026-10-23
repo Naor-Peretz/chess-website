@@ -1,52 +1,30 @@
 #!/bin/bash
-# PostToolUse hook: After ExitPlanMode, trigger plan review and git workflow
+# PostToolUse(ExitPlanMode): a plan just got approved. Route it through review
+# and onto a branch before implementation starts.
 #
-# Workflow:
-# 1. Run plan-reviewer agent to review the created plan
-# 2. Check if on correct branch (should contain "plan" and plan topic)
-# 3. If not, create new branch
-# 4. Push to git (no CI/CD needed)
+# Wrapped in additionalContext: on tool events plain stdout is shown to the user
+# but never reaches the model, so the previous heredoc version was invisible to
+# Claude.
+set -uo pipefail
 
-# Get input from stdin
-INPUT=$(cat)
+input=$(cat)
 
-# Extract tool name from input
-TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // .tool // empty' 2>/dev/null)
+tool_name=$(jq -r '.tool_name // empty' <<<"$input")
+[ "$tool_name" = "ExitPlanMode" ] || exit 0
 
-# Only trigger for ExitPlanMode
-if [ "$TOOL_NAME" != "ExitPlanMode" ]; then
-    exit 0
-fi
+cd "${CLAUDE_PROJECT_DIR:-$(pwd)}" 2>/dev/null || exit 0
+branch=$(git branch --show-current 2>/dev/null)
 
-# Get current branch
-CURRENT_BRANCH=$(git branch --show-current 2>/dev/null)
+context=$(
+  printf 'A plan was just approved. Before writing implementation code:\n\n'
+  printf '1. Review it. Launch the plan-reviewer agent on the plan and act on what\n'
+  printf '   comes back. Skipping this is how design problems reach the diff.\n'
+  printf '2. Branch. Current branch is "%s". Plans belong on a plan/<topic>\n' "${branch:-detached}"
+  printf '   branch; create one if this is not already it.\n'
+  printf '3. Commit and push the plan file. dev/ is gitignored, so it needs\n'
+  printf '   `git add -f dev/active/<feature>/...` or the commit will be empty.\n\n'
+  printf 'Then report the review outcome, the branch, and the push result.\n'
+)
 
-# Output instructions for Claude
-cat << 'EOF'
-<plan-review-workflow>
-IMPORTANT: A plan was just created. Follow this workflow:
-
-1. **Review the Plan**
-   - Use the Task tool with subagent_type="plan-reviewer" to review the plan you just created
-   - Wait for the review feedback
-
-2. **Git Branch Check**
-   - Current branch: Check if it contains "plan/" prefix
-   - If NOT on a plan branch, create one: `git checkout -b plan/<short-plan-description>`
-   - Branch name should be descriptive (e.g., plan/telegram-notifications, plan/auth-refactor)
-
-3. **Commit and Push**
-   - Stage the plan file(s)
-   - Commit with message: "plan: <brief description of the plan>"
-   - Push to remote: `git push -u origin <branch-name>`
-
-4. **Report back** to the user with:
-   - Plan review summary
-   - Branch name used
-   - Push status
-
-Do NOT skip the plan review step - it helps catch issues before implementation.
-</plan-review-workflow>
-EOF
-
-exit 0
+jq -n --arg ctx "$context" \
+  '{hookSpecificOutput: {hookEventName: "PostToolUse", additionalContext: $ctx}}'
