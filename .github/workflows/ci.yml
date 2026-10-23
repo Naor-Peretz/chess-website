@@ -77,14 +77,17 @@ jobs:
       - name: Build all packages
         run: pnpm build
 
-      # pnpm -r rather than turbo: turbo does not forward the secrets below.
+      # pnpm -r rather than turbo: turbo does not forward the env below.
+      #
+      # No repository secrets here on purpose. Dependabot pull requests read from
+      # their own, separate secret store, which is empty for this repo, so a test
+      # step that needs a secret fails every Dependabot PR whatever it bumps.
+      # apps/backend/jest.setup.js supplies the OAuth placeholders that
+      # src/config/passport.ts requires at import time.
       - name: Run tests
         run: pnpm -r test
         env:
-          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
-          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           JWT_SECRET: 'test-jwt-secret-for-ci'
-          TEST_AUTH_TOKEN: ${{ secrets.TEST_AUTH_TOKEN }}
           FRONTEND_URL: 'http://localhost:3000'
 
   security:

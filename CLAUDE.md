@@ -403,10 +403,11 @@ GitHub Actions workflows in `.github/workflows/`:
 
 **CI checks include:** format, lint, prisma validate/generate, build, test, **outdated/deprecated packages (strict)**, dependency audit, license check, Gitleaks secret scanning.
 
-**CI secrets required:**
-
-- `GOOGLE_CLIENT_ID` - Google OAuth client ID (for passport initialization in tests)
-- `GOOGLE_CLIENT_SECRET` - Google OAuth client secret
+**CI secrets:** `build-test` deliberately needs none. Dependabot pull requests
+read from their own, separate secret store, so a test step that depends on a
+repository secret fails every Dependabot PR no matter what it bumps.
+`apps/backend/jest.setup.js` supplies the Google OAuth placeholders that
+`src/config/passport.ts` requires at import time.
 
 **Note:** CI runs tests with `pnpm -r test` (not turbo) to ensure env vars are passed correctly to Jest.
 
