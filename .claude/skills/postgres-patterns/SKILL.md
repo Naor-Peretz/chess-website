@@ -1,6 +1,7 @@
 ---
 name: postgres-patterns
-description: PostgreSQL database patterns for query optimization, schema design, indexing, and security. Based on Supabase best practices.
+description: |
+  Postgres and Prisma query patterns for this project: index design for the games table, query shapes that use them, transaction and connection behaviour behind the Supabase pooler, and safe migration steps. Use when writing a repository query, adding an index, or changing schema.prisma.
 ---
 
 # PostgreSQL Patterns
