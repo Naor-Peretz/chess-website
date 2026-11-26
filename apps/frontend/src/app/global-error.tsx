@@ -69,6 +69,10 @@ export default function GlobalError({
                 Try again
               </button>
               <button
+                // A hard document reload is the point of this button: the
+                // global error boundary means the React tree is broken, so a
+                // soft router navigation would keep the broken tree mounted.
+                // eslint-disable-next-line @next/next/no-location-assign-relative-destination
                 onClick={() => (window.location.href = '/')}
                 className="rounded-lg border border-gray-600 px-6 py-3 font-semibold text-gray-300 transition-colors hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
               >

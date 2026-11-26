@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
@@ -62,9 +62,17 @@ export default function NewGamePage() {
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Redirect if not authenticated
+  // Redirect if not authenticated. The navigation belongs in an effect: calling
+  // router.push() during render updates the Router while this component renders,
+  // which React reports as "Cannot update a component while rendering a
+  // different component".
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      router.push('/');
+    }
+  }, [authLoading, isAuthenticated, router]);
+
   if (!authLoading && !isAuthenticated) {
-    router.push('/');
     return null;
   }
 
