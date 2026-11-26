@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useCallback, useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
@@ -236,13 +236,9 @@ export default function HistoryPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [resultFilter, setResultFilter] = useState<ResultFilter>('all');
 
-  useEffect(() => {
-    if (!authLoading && isAuthenticated) {
-      loadGames();
-    }
-  }, [authLoading, isAuthenticated]);
-
-  const loadGames = async () => {
+  // Declared before the effect that calls it: as a plain `const` further down it
+  // sat in the temporal dead zone, and it was missing from the dependency array.
+  const loadGames = useCallback(async () => {
     try {
       const gameList = await gameApi.listGames();
       setGames(gameList);
@@ -253,7 +249,18 @@ export default function HistoryPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  // The rule counts loadGames() as a synchronous setState because the compiler
+  // sees setState inside it, but those run after an await. Its remedy is a data
+  // fetching library; @tanstack/react-query is a dependency here but has no
+  // provider mounted yet, so that migration is its own piece of work.
+  useEffect(() => {
+    if (!authLoading && isAuthenticated) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- async fetch; see note above
+      loadGames();
+    }
+  }, [authLoading, isAuthenticated, loadGames]);
 
   // Filter and sort games
   const filteredAndSortedGames = useMemo(() => {
@@ -297,9 +304,17 @@ export default function HistoryPage() {
     return result;
   }, [games, statusFilter, resultFilter, sortOrder]);
 
-  // Redirect if not authenticated
+  // Redirect if not authenticated. The navigation belongs in an effect: calling
+  // router.push() during render updates the Router while this component renders,
+  // which React reports as "Cannot update a component while rendering a
+  // different component".
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      router.push('/');
+    }
+  }, [authLoading, isAuthenticated, router]);
+
   if (!authLoading && !isAuthenticated) {
-    router.push('/');
     return null;
   }
 

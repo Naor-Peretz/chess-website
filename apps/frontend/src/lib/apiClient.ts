@@ -62,7 +62,11 @@ apiClient.interceptors.response.use(
     if (error.response?.status === 401) {
       const isAuthRoute = error.config?.url?.includes('/auth/');
       if (!isAuthRoute && typeof window !== 'undefined') {
-        // Only redirect for non-auth routes
+        // Only redirect for non-auth routes.
+        // This is an Axios interceptor, not a component, so useRouter() is not
+        // available. A hard redirect is also what we want on session expiry: it
+        // drops any in-memory state tied to the expired session.
+        // eslint-disable-next-line @next/next/no-location-assign-relative-destination
         window.location.href = '/';
       }
     }

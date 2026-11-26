@@ -47,14 +47,26 @@ export default function GamePage() {
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [isResigning, setIsResigning] = useState(false);
   const [invalidMove, setInvalidMove] = useState(false);
-  const [selectedSquare, setSelectedSquare] = useState<Square | null>(null);
-  const [possibleMoves, setPossibleMoves] = useState<Square[]>([]);
+  // A selection only means anything for the position it was made in, so it
+  // carries that position's FEN. Any new FEN — the user's move or the engine's
+  // reply — retires it during render, which is what the old "clear the
+  // selection when currentFen changes" effect was doing a render too late.
+  const [selection, setSelection] = useState<{
+    fen: string;
+    square: Square;
+    moves: Square[];
+  } | null>(null);
   const [pendingPromotion, setPendingPromotion] = useState<PendingPromotion | null>(null);
+
+  const clearSelection = useCallback(() => setSelection(null), []);
 
   // Local display times for clock ticking (separate from server times)
   const [displayTimeUser, setDisplayTimeUser] = useState<number>(0);
   const [displayTimeEngine, setDisplayTimeEngine] = useState<number>(0);
-  const lastTickRef = useRef<number>(Date.now());
+  // Seeded in the effects below, not here: a useRef initializer runs during
+  // render, and Date.now() is impure, so reading it there makes the render
+  // non-idempotent.
+  const lastTickRef = useRef<number>(0);
 
   // Chess.js instance for client-side validation
   const currentFen = game?.currentFen;
@@ -62,6 +74,11 @@ export default function GamePage() {
     if (!currentFen) return null;
     return new Chess(currentFen);
   }, [currentFen]);
+
+  // A selection made in an earlier position never renders.
+  const activeSelection = selection && selection.fen === currentFen ? selection : null;
+  const selectedSquare = activeSelection?.square ?? null;
+  const possibleMoves = useMemo(() => activeSelection?.moves ?? [], [activeSelection]);
 
   // Replay mode for finished games
   const isReplayMode = game?.isGameOver ?? false;
@@ -117,6 +134,15 @@ export default function GamePage() {
 
   // Sync display times with server times when game updates
   // Uses turnStartedAt to calculate accurate elapsed time for page loads/refreshes
+  //
+  // react-hooks/set-state-in-effect is suppressed below rather than satisfied.
+  // The displayed clock is not derivable during render: it is the server's
+  // remaining time minus the wall-clock gap since turnStartedAt, and reading
+  // Date.now() in a render body is the impure call the purity rule rejects.
+  // Syncing an external system's state into React is what effects are for.
+  // Removing the suppression means deriving both clocks from a single ticking
+  // `now` state — a rewrite of the clock that cannot be verified without an
+  // authenticated session, so it is deliberately not bundled into this upgrade.
   useEffect(() => {
     if (game) {
       // If game has time control, is active, and has a turn timestamp, calculate accurate time
@@ -127,6 +153,7 @@ export default function GamePage() {
 
         if (game.currentTurn === 'w') {
           // User's turn - deduct elapsed from user's time
+          // eslint-disable-next-line react-hooks/set-state-in-effect -- see note above the effect
           setDisplayTimeUser(Math.max(0, game.timeLeftUser - elapsed));
           setDisplayTimeEngine(game.timeLeftEngine);
         } else {
@@ -157,6 +184,11 @@ export default function GamePage() {
     }
 
     const currentTurn = game.currentTurn;
+    // Seed the tick baseline here too. The sync effect above already sets it
+    // whenever `game` changes, and effects run in declaration order, but this
+    // keeps the first interval's `elapsed` correct no matter how the effect is
+    // reached — a stale 0 would subtract the whole Unix epoch from the clock.
+    lastTickRef.current = Date.now();
     const intervalId = setInterval(() => {
       const now = Date.now();
       const elapsed = now - lastTickRef.current;
@@ -247,8 +279,15 @@ export default function GamePage() {
     }
   }, [gameId]);
 
+  // Fetch on mount once auth resolves. The rule counts fetchGame() as a
+  // synchronous setState because the compiler sees setState inside it, but
+  // every one of those runs after an await. The rule's own remedy is a data
+  // fetching library: @tanstack/react-query is already a dependency with a
+  // configured queryClient, but no QueryClientProvider is mounted and no
+  // useQuery call exists yet, so adopting it is its own piece of work.
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- async fetch; see note above
       fetchGame();
     }
   }, [authLoading, isAuthenticated, fetchGame]);
@@ -515,15 +554,13 @@ export default function GamePage() {
         !!pendingPromotion
       ) {
         // Clear selection if game is over, not user's turn, moving, or promoting
-        setSelectedSquare(null);
-        setPossibleMoves([]);
+        clearSelection();
         return;
       }
 
       // If clicking the same square, deselect
       if (selectedSquare === clickedSquare) {
-        setSelectedSquare(null);
-        setPossibleMoves([]);
+        clearSelection();
         return;
       }
 
@@ -538,8 +575,7 @@ export default function GamePage() {
           targetSquare: clickedSquare,
         });
 
-        setSelectedSquare(null);
-        setPossibleMoves([]);
+        clearSelection();
         return;
       }
 
@@ -550,15 +586,13 @@ export default function GamePage() {
         const moves = chess.moves({ square: clickedSquare, verbose: true });
         const targetSquares = moves.map((move) => move.to as Square);
 
-        setSelectedSquare(clickedSquare);
-        setPossibleMoves(targetSquares);
+        setSelection({ fen: chess.fen(), square: clickedSquare, moves: targetSquares });
       } else {
         // Clicked on empty square or opponent piece - clear selection
-        setSelectedSquare(null);
-        setPossibleMoves([]);
+        clearSelection();
       }
     },
-    [game, chess, selectedSquare, possibleMoves, onDrop, isMoving, pendingPromotion]
+    [game, chess, selectedSquare, possibleMoves, onDrop, isMoving, pendingPromotion, clearSelection]
   );
 
   // Handle promotion piece selection from dialog
@@ -653,15 +687,12 @@ export default function GamePage() {
     // Clear highlights — needed for drag-and-drop path which doesn't clear highlights
     // before the promotion dialog opens. Redundant for click-to-move (already cleared in
     // onSquareClick before onDrop delegation) but harmless.
-    setSelectedSquare(null);
-    setPossibleMoves([]);
-  }, []);
+    clearSelection();
+  }, [clearSelection]);
 
-  // Clear selection when move is made (after drag or when turn changes)
-  useEffect(() => {
-    setSelectedSquare(null);
-    setPossibleMoves([]);
-  }, [game?.currentFen]);
+  // The "clear the selection when currentFen changes" effect that used to live
+  // here is gone: `selection` carries the FEN it was made in, so a new position
+  // retires it during render instead of after a second render pass.
 
   // Handle save game
   const handleSaveGame = async () => {

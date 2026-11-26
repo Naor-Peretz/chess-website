@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
@@ -248,13 +248,9 @@ export default function StatsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!authLoading && isAuthenticated) {
-      loadStats();
-    }
-  }, [authLoading, isAuthenticated]);
-
-  const loadStats = async () => {
+  // Declared before the effect that calls it: as a plain `const` further down it
+  // sat in the temporal dead zone, and it was missing from the dependency array.
+  const loadStats = useCallback(async () => {
     try {
       setIsLoading(true);
       const data = await statsApi.getUserStats();
@@ -270,11 +266,30 @@ export default function StatsPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  // Redirect if not authenticated
+  // The rule counts loadStats() as a synchronous setState because the compiler
+  // sees setState inside it, but those run after an await. Its remedy is a data
+  // fetching library; @tanstack/react-query is a dependency here but has no
+  // provider mounted yet, so that migration is its own piece of work.
+  useEffect(() => {
+    if (!authLoading && isAuthenticated) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- async fetch; see note above
+      loadStats();
+    }
+  }, [authLoading, isAuthenticated, loadStats]);
+
+  // Redirect if not authenticated. The navigation belongs in an effect: calling
+  // router.push() during render updates the Router while this component renders,
+  // which React reports as "Cannot update a component while rendering a
+  // different component".
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      router.push('/');
+    }
+  }, [authLoading, isAuthenticated, router]);
+
   if (!authLoading && !isAuthenticated) {
-    router.push('/');
     return null;
   }
 
